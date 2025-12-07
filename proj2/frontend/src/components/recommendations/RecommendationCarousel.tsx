@@ -5,8 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Progress } from '@/components/ui/progress';
-import { ChefHat, RefreshCw, Sparkles, UtensilsCrossed, Eraser, Bot, Baseline } from 'lucide-react';
+import { ChefHat, RefreshCw, Sparkles, UtensilsCrossed, Eraser, Bot, Baseline, MapPin } from 'lucide-react';
 import { useMealRecommendations } from '@/hooks/useRecommendations';
+import { useGooglePlaceSearch } from "@/hooks/useGooglePlaces";
 import type {
   MealRecommendationResponse,
   RecommendationFiltersPayload,
@@ -26,6 +27,7 @@ interface NormalizedRecommendation {
   explanation: string;
   highlights: string[];
   restaurant?: string;
+  restaurant_place_id?: string;
   description?: string;
   price?: number;
   calories?: number;
@@ -62,12 +64,65 @@ const clampScore = (value: unknown): number => {
   return Math.min(1, Math.max(0, parsed));
 };
 
-const extractRestaurant = (explanation: string, fallback?: string): string | undefined => {
-  const match = explanation.match(/restaurant[:\s-]+([^;,\n]+)/i);
-  if (match && match[1]) {
-    return match[1].trim();
+const isValidRestaurantName = (name: string): boolean => {
+  if (!name || name.length < 2 || name.length > 100) {
+    return false;
   }
-  return fallback;
+  
+  // Reject if it contains common non-restaurant phrases
+  const invalidPatterns = [
+    /falls within/i,
+    /price range/i,
+    /\$\$/,
+    /and\s+falls/i,
+    /within\s+the/i,
+    /range\s*\(/i,
+    /^\d+\.\d+$/,
+  ];
+  
+  for (const pattern of invalidPatterns) {
+    if (pattern.test(name)) {
+      return false;
+    }
+  }
+  
+  // Should start with a letter and contain mostly letters/spaces/common restaurant chars
+  if (!/^[A-Za-z]/.test(name)) {
+    return false;
+  }
+  
+  // Should not be just numbers or special characters
+  if (/^[\d\s$().]+$/.test(name)) {
+    return false;
+  }
+  
+  return true;
+};
+
+const extractRestaurant = (explanation: string, fallback?: string): string | undefined => {
+  // First try to use the fallback if it exists and looks valid
+  if (fallback && isValidRestaurantName(fallback)) {
+    return fallback;
+  }
+  
+  // Try to extract restaurant name from explanation
+  // Look for patterns like "restaurant: Name" or "at Restaurant Name" or "from Restaurant Name"
+  const patterns = [
+    /restaurant[:\s-]+([A-Z][A-Za-z0-9\s&'-]{2,40})(?:[;,\n]|$)/i,
+    /(?:at|from|via)\s+([A-Z][A-Za-z0-9\s&'-]{2,40})\s+(?:restaurant|eatery|dining)/i,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = explanation.match(pattern);
+    if (match && match[1]) {
+      const extracted = match[1].trim();
+      if (isValidRestaurantName(extracted)) {
+        return extracted;
+      }
+    }
+  }
+  
+  return fallback && isValidRestaurantName(fallback) ? fallback : undefined;
 };
 
 const splitHighlights = (explanation: string): string[] => {
@@ -102,25 +157,35 @@ const normalizeRecommendationResponse = (
       const record = item as Record<string, unknown>;
       const score = clampScore(item.score);
       const explanation = item.explanation?.trim() ?? '';
+      
+      // Use restaurant_name directly from API response (most reliable - from database)
+      // DO NOT extract from explanation as LLM may mention wrong restaurants
+      const restaurantNameFromAPI = 
+        typeof item.restaurant_name === 'string' && item.restaurant_name.trim() ? item.restaurant_name.trim() :
+        typeof record.restaurant_name === 'string' && record.restaurant_name.trim() ? record.restaurant_name.trim() :
+        undefined;
+      
+      // Try to get restaurant from other fields as fallback (but not from explanation)
       const restaurantField = (() => {
+        if (restaurantNameFromAPI) {
+          return restaurantNameFromAPI;
+        }
         const direct = record.restaurant;
-        if (typeof direct === 'string') {
-          return direct;
+        if (typeof direct === 'string' && direct.trim()) {
+          return direct.trim();
         }
         if (direct && typeof direct === 'object' && 'name' in direct) {
           const maybeName = (direct as Record<string, unknown>).name;
-          if (typeof maybeName === 'string') {
-            return maybeName;
+          if (typeof maybeName === 'string' && maybeName.trim()) {
+            return maybeName.trim();
           }
-        }
-        const restaurantNameField = record.restaurant_name;
-        if (typeof restaurantNameField === 'string') {
-          return restaurantNameField;
         }
         return undefined;
       })();
 
-      const restaurant = extractRestaurant(explanation, restaurantField);
+      // ONLY use API restaurant_name or restaurant field - never extract from explanation
+      // The explanation may contain incorrect restaurant names from LLM
+      const restaurant = restaurantNameFromAPI || restaurantField || undefined;
       const highlights = splitHighlights(explanation).filter(
         (entry) => !entry.toLowerCase().startsWith('restaurant')
       );
@@ -132,6 +197,7 @@ const normalizeRecommendationResponse = (
         explanation,
         highlights,
         restaurant,
+        restaurant_place_id: typeof item.restaurant_place_id === 'string' ? item.restaurant_place_id : undefined,
         description: typeof record.description === 'string' ? record.description : undefined,
         price:
           typeof record.price === 'number'
@@ -152,18 +218,28 @@ const normalizeRecommendationResponse = (
   if ('recommendations' in data) {
     return data.recommendations.map((item) => {
       const explanation = item.explanation?.trim() ?? '';
-      const restaurantName = extractRestaurant(explanation, item.restaurant?.name);
+      
+      // Use restaurant_name from API (database) - never extract from explanation
+      // The LLM explanation may contain incorrect restaurant names
+      const restaurantName = 
+        (item.restaurant_name && typeof item.restaurant_name === 'string' && item.restaurant_name.trim()) 
+          ? item.restaurant_name.trim() :
+        (item.restaurant?.name && typeof item.restaurant.name === 'string' && item.restaurant.name.trim())
+          ? item.restaurant.name.trim() :
+        undefined;
+      
       const highlights = splitHighlights(explanation).filter(
         (entry) => !entry.toLowerCase().startsWith('restaurant')
       );
 
       return {
-        id: String(item.menu_item_id),
-        name: item.menu_item?.name ?? 'Recommended item',
+        id: String(item.item_id),
+        name: item.name ?? 'Recommended item',
         score: clampScore(item.score),
         explanation,
         highlights,
         restaurant: restaurantName,
+        restaurant_place_id: typeof item.restaurant_place_id === 'string' ? item.restaurant_place_id : undefined,
         description: item.menu_item?.description,
         price: item.menu_item?.price ?? undefined,
         calories: item.menu_item?.calories ?? undefined,
@@ -173,6 +249,88 @@ const normalizeRecommendationResponse = (
 
   return [];
 };
+
+
+interface Props {
+  restaurant?: string;
+  placeId?: string;
+}
+
+export default function RecommendationMapPreview({ restaurant, placeId }: Props) {
+  // If we have place_id, use it directly (most reliable)
+  if (placeId) {
+    return (
+      <div className="mt-3 space-y-2">
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <MapPin className="h-3 w-3" />
+          <span>Location preview</span>
+        </div>
+
+        <iframe
+          width="100%"
+          height="180"
+          loading="lazy"
+          allowFullScreen
+          className="rounded-md border"
+          src={`https://www.google.com/maps/embed/v1/place?key=${
+            import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+          }&q=place_id:${placeId}`}
+        />
+
+        <a
+          href={`https://www.google.com/maps/search/?api=1&query=place_id:${placeId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-blue-600 underline"
+        >
+          View on Google Maps
+        </a>
+      </div>
+    );
+  }
+
+  // Fallback: search by restaurant name if place_id not available
+  if (!restaurant || !isValidRestaurantName(restaurant)) {
+    return null;
+  }
+  
+  const { data } = useGooglePlaceSearch(restaurant);
+
+  // Normalize: backend may return an array OR an object
+  const place = Array.isArray(data) ? data[0] : data;
+
+  if (!place) return null;
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <MapPin className="h-3 w-3" />
+        <span>Location preview</span>
+      </div>
+
+      <iframe
+        width="100%"
+        height="180"
+        loading="lazy"
+        allowFullScreen
+        className="rounded-md border"
+        src={`https://www.google.com/maps/embed/v1/place?key=${
+          import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+        }&q=place_id:${place.place_id}`}
+      />
+
+      <a
+        href={`https://www.google.com/maps/search/?api=1&query=place_id:${place.place_id}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-xs text-blue-600 underline"
+      >
+        View on Google Maps
+      </a>
+    </div>
+  );
+}
+
 
 export function RecommendationCarousel({
   userId,
@@ -751,6 +909,9 @@ export function RecommendationCarousel({
                     ))}
                   </ul>
                 )}
+
+                {/* Google Maps Mini Preview */}
+                <RecommendationMapPreview restaurant={item.restaurant} placeId={item.restaurant_place_id} />
 
                 <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground">
                   <span>Reasoned by {mode === 'llm' ? 'LLM' : 'baseline'} engine</span>
