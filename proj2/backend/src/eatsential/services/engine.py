@@ -8,12 +8,14 @@ import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, Sequence
 
 from google import genai
 from google.genai import types as genai_types
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, selectinload
+from .google_places import search_places_for_cuisine
+from .restaurant_service import save_restaurant_from_google_places
 
 if TYPE_CHECKING:
     from google.genai.client import Client as GenAiClient
@@ -119,7 +121,7 @@ class RecommendationService:
     # Public APIs
     # ------------------------------------------------------------------ #
 
-    def get_meal_recommendations(
+    async def get_meal_recommendations(
         self,
         *,
         user: UserDB,
@@ -135,24 +137,30 @@ class RecommendationService:
         if not safe_candidates:
             return RecommendationResponse(items=[])
 
+        # Baseline fallback mode
         if (request.mode or "llm") == "baseline":
             baseline = self._get_baseline_meals(context, safe_candidates, filters)
             return RecommendationResponse(items=baseline[: self.max_results])
 
+        # Try LLM recommendations
         try:
-            llm = self._get_llm_recommendations(
+            llm = await self._get_llm_recommendations(
                 context=context,
-                items=safe_candidates,
-                filters=filters,
+                items=safe_candidates,          # FIXED
+                filters=request.filters,
                 entity_type="meal",
+                restaurant_menu_map=None,       # FIXED
             )
+
             if llm:
                 return RecommendationResponse(items=llm[: self.max_results])
+
         except Exception as exc:
             logger.exception(
                 "LLM recommendation failed, falling back to baseline: %s", exc
             )
 
+        # Fallback
         baseline = self._get_baseline_meals(context, safe_candidates, filters)
         return RecommendationResponse(items=baseline[: self.max_results])
 
@@ -508,7 +516,7 @@ class RecommendationService:
             self._llm_client = genai.Client(api_key=self.llm_api_key)
         return self._llm_client
 
-    def _get_llm_recommendations(
+    async def _get_llm_recommendations(
         self,
         *,
         context: _UserContext,
@@ -518,8 +526,56 @@ class RecommendationService:
         restaurant_menu_map: dict[str, list[MenuItem]] | None = None,
     ) -> list[RecommendedItem]:
         """Call the Gemini API via google-genai for ranking and explanations."""
-        client = self._get_llm_client()
 
+        # ---------------------------------------------------------
+        # NEW: OVERRIDE RESTAURANT CANDIDATES USING GOOGLE PLACES
+        # ---------------------------------------------------------
+        if entity_type == "restaurant":
+            cuisines = filters.cuisine or []
+            google_candidates = []
+
+            # Fetch nearby real restaurants for each cuisine
+            for c in cuisines:
+                results = await search_places_for_cuisine(c)
+                google_candidates.extend(results)
+
+            # Deduplicate by place_id
+            uniq = {}
+            for place in google_candidates:
+                uniq[place["place_id"]] = place
+                
+                # Save restaurant to database with cuisine from filter
+                if place.get("place_id"):
+                    # Use the cuisine from the filter (more reliable than extracting from types)
+                    restaurant_cuisine = cuisines[0] if cuisines else None
+                    save_restaurant_from_google_places(
+                        db=self.db,
+                        place_data={
+                            "place_id": place.get("place_id"),
+                            "name": place.get("name"),
+                            "formatted_address": place.get("address"),
+                            "types": place.get("types", []),  # Now available from search_places_for_cuisine
+                            "geometry": {"location": place.get("location")} if place.get("location") else {},
+                        },
+                        cuisine=restaurant_cuisine,
+                    )
+
+            # Replace `items` with real Google candidates
+            items = [
+                Restaurant(
+                    id=p["place_id"],
+                    name=p["name"],
+                    address=p.get("address"),
+                    cuisine=cuisines[0] if cuisines else None,
+                    is_active=True
+                )
+                for p in uniq.values()
+            ]
+
+        # ---------------------------------------------------------
+        # Build prompt with correct items
+        # ---------------------------------------------------------
+        client = self._get_llm_client()
         prompt = self._build_prompt(
             context=context,
             items=items,
@@ -541,50 +597,59 @@ class RecommendationService:
 
         structured = self._extract_llm_suggestions(response)
 
-        candidate_lookup: dict[str, MenuItem | Restaurant]
-        if entity_type == "meal":
-            menu_items = cast(Sequence[MenuItem], items)
-            candidate_lookup = {str(item.id): item for item in menu_items}
-        else:
-            restaurants = cast(Sequence[Restaurant], items)
-            candidate_lookup = {
-                str(restaurant.id): restaurant for restaurant in restaurants
-            }
+        # Lookup table for item selection
+        candidate_lookup = {str(i.id): i for i in items}
 
         recommendations: list[RecommendedItem] = []
+
         for entry in structured:
             item_id = entry.get("item_id")
-            if item_id is None:
+            if not item_id:
                 continue
 
             item = candidate_lookup.get(str(item_id))
             if not item:
                 continue
 
-            name_raw = entry.get("name")
-            if isinstance(name_raw, str) and name_raw:
-                name = name_raw
-            else:
-                name = getattr(item, "name", "")
+            name = entry.get("name") or getattr(item, "name", "")
+            explanation = (entry.get("explanation") or "Selected by LLM ranking").strip()
 
-            raw_score = entry.get("score", 0.0)
+            # Score
             try:
-                if isinstance(raw_score, (int, float, str)):
-                    score = float(raw_score)
-                else:
-                    score = 0.0
-            except (TypeError, ValueError):
+                score = float(entry.get("score", 0.0))
+                score = max(0.0, min(score, 1.0))
+            except Exception:
                 score = 0.0
-            score = max(0.0, min(score, 1.0))
 
-            explanation_raw = entry.get("explanation")
-            if isinstance(explanation_raw, str):
-                explanation_candidate = explanation_raw
-            elif explanation_raw is None:
-                explanation_candidate = ""
+            # Restaurant name/address/place_id - prioritize database data over LLM response
+            # For menu items, get restaurant info from the relationship (most reliable)
+            if entity_type == "meal":
+                # Menu item - get restaurant info from relationship (database is source of truth)
+                if hasattr(item, "restaurant") and item.restaurant:
+                    database_restaurant_name = item.restaurant.name
+                    database_restaurant_address = item.restaurant.address
+                    # restaurant.id is the place_id (stored when saving from Google Places)
+                    database_restaurant_place_id = item.restaurant.id if item.restaurant.id else None
+                else:
+                    database_restaurant_name = None
+                    database_restaurant_address = None
+                    database_restaurant_place_id = None
+                
+                # Use database restaurant name first, only use LLM if database doesn't have it
+                restaurant_name = database_restaurant_name or entry.get("restaurant_name")
+                restaurant_address = database_restaurant_address or entry.get("restaurant_address")
+                restaurant_place_id = database_restaurant_place_id
             else:
-                explanation_candidate = str(explanation_raw)
-            explanation = explanation_candidate.strip() or "Selected by LLM ranking"
+                # Restaurant item - get info directly from database
+                database_restaurant_name = getattr(item, "name", None)
+                database_restaurant_address = getattr(item, "address", None)
+                # For restaurants, the id IS the place_id
+                database_restaurant_place_id = str(item.id) if hasattr(item, "id") else None
+                
+                # Use database restaurant name first, only use LLM if database doesn't have it
+                restaurant_name = database_restaurant_name or entry.get("restaurant_name")
+                restaurant_address = database_restaurant_address or entry.get("restaurant_address")
+                restaurant_place_id = database_restaurant_place_id
 
             recommendations.append(
                 RecommendedItem(
@@ -592,11 +657,15 @@ class RecommendationService:
                     name=name,
                     score=score,
                     explanation=explanation,
+                    restaurant_name=restaurant_name,
+                    restaurant_address=restaurant_address,
+                    restaurant_place_id=restaurant_place_id,
                 )
             )
 
         recommendations.sort(key=lambda rec: (-rec.score, rec.item_id))
         return recommendations
+
 
     def _build_prompt(
         self,
@@ -607,7 +676,7 @@ class RecommendationService:
         entity_type: str,
         restaurant_menu_map: dict[str, list[MenuItem]] | None = None,
     ) -> str:
-        """Construct a structured prompt for Gemini."""
+
         user_profile = self._serialize_user_profile(context)
         filters_payload = {
             "diet": filters.diet or [],
@@ -616,34 +685,43 @@ class RecommendationService:
         }
 
         if entity_type == "meal":
-            menu_items = cast(Sequence[MenuItem], items)
             candidates_payload = [
-                self._serialize_menu_item(item) for item in menu_items
+                self._serialize_menu_item(item)
+                for item in cast(Sequence[MenuItem], items)
             ]
         else:
-            restaurants = cast(Sequence[Restaurant], items)
+            # Restaurants (now from Google Places)
             candidates_payload = [
-                self._serialize_restaurant(
-                    restaurant,
-                    (restaurant_menu_map or {}).get(str(restaurant.id), []),
-                )
-                for restaurant in restaurants
+                {
+                    "id": r.id,
+                    "name": r.name,
+                    "address": getattr(r, "address", None),
+                    "cuisine": r.cuisine,
+                }
+                for r in cast(Sequence[Restaurant], items)
             ]
 
         prompt = (
-            "You are a helpful nutrition and dining assistant.\n\n"
+            "You are a helpful dining assistant.\n\n"
             f"User Profile:\n{json.dumps(user_profile, indent=2)}\n\n"
-            f"Request Filters:\n{json.dumps(filters_payload, indent=2)}\n\n"
-            f"Candidate {entity_type.title()}s:\n"
-            f"{json.dumps(candidates_payload, indent=2)}\n\n"
-            "Task: From the candidate list provided, select and rank the top 5 items "
-            "that best match the user's profile, health context, and request filters. "
-            "For each item, provide a score between 0.0 and 1.0 "
-            "and a short explanation for why it's a good match.\n\n"
-            "Output Format: Return your response only as a valid JSON list in the "
-            'following format: [{"item_id": "...", "name": "...", "score": 0.9, '
-            '"explanation": "..."}]'
+            f"Filters:\n{json.dumps(filters_payload, indent=2)}\n\n"
+            f"Candidate Restaurants:\n{json.dumps(candidates_payload, indent=2)}\n\n"
+            "TASK:\n"
+            "Select the TOP 5 restaurants ONLY from the candidate list provided.\n"
+            "You MUST NOT invent or modify restaurant names or addresses.\n"
+            "Use ONLY the restaurants shown in the candidate list.\n\n"
+            "For each returned result, include:\n"
+            "- item_id\n"
+            "- name\n"
+            "- restaurant_name\n"
+            "- restaurant_address\n"
+            "- score (0.0–1.0)\n"
+            "- explanation\n\n"
+            "Output ONLY valid JSON in this format:\n"
+            '[{\"item_id\": \"...\", \"name\": \"...\", \"restaurant_name\": \"...\", '
+            '\"restaurant_address\": \"...\", \"score\": 0.9, \"explanation\": \"...\"}]\n'
         )
+
         return prompt
 
     def _extract_llm_suggestions(self, data: object) -> list[dict[str, object]]:
@@ -718,7 +796,7 @@ class RecommendationService:
     # ------------------------------------------------------------------ #
 
     def _serialize_user_profile(self, context: _UserContext) -> dict[str, object]:
-        """Serialize user context for the prompt."""
+        """Serialize user context and location for the Gemini prompt."""
         health_profile = context.user.health_profile
         profile: dict[str, object] = {
             "user_id": context.user.id,
@@ -736,6 +814,18 @@ class RecommendationService:
             ],
         }
 
+        # -----------------------------
+        # ADD USER LOCATION CONTEXT
+        # -----------------------------
+        profile["location"] = {
+            "city": getattr(context.user, "city", None),
+            "state": getattr(context.user, "state", None),
+            "zip_code": getattr(context.user, "zip_code", None),
+            "latitude": getattr(context.user, "latitude", None),
+            "longitude": getattr(context.user, "longitude", None),
+        }
+
+        # Biometrics (already included)
         if health_profile:
             profile["biometrics"] = {
                 "height_cm": self._decimal_to_float(health_profile.height_cm),
@@ -762,7 +852,7 @@ class RecommendationService:
         restaurant: Restaurant,
         menu_items: Sequence[MenuItem],
     ) -> dict[str, object]:
-        """Serialize restaurant information for the LLM."""
+        """Serialize restaurant for LLM with location info."""
         sample_menu = [
             {
                 "item_id": str(item.id),
@@ -778,7 +868,11 @@ class RecommendationService:
             "item_id": str(restaurant.id),
             "name": restaurant.name,
             "cuisine": restaurant.cuisine,
-            "address": restaurant.address,
+            "address": restaurant.address,  # ← IMPORTANT
+            "city": restaurant.city if hasattr(restaurant, "city") else None,
+            "state": restaurant.state if hasattr(restaurant, "state") else None,
+            "latitude": restaurant.latitude if hasattr(restaurant, "latitude") else None,
+            "longitude": restaurant.longitude if hasattr(restaurant, "longitude") else None,
             "sample_menu_items": sample_menu,
         }
 
