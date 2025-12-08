@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from src.eatsential.db.database import DATABASE_URL, Base
 from src.eatsential.models import (  # noqa: F401 - needed for Base.metadata
     MenuItem,
+    RecommendationFeedbackDB,
     Restaurant,
     UserDB,
 )

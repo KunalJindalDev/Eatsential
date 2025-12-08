@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -6,8 +6,9 @@ import { Label } from '@/components/ui/label';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Plus } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
-import { ChefHat, RefreshCw, Sparkles, UtensilsCrossed, Eraser, Bot, Baseline } from 'lucide-react';
+import { ChefHat, RefreshCw, Sparkles, UtensilsCrossed, Eraser, Bot, Baseline, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useMealRecommendations } from '@/hooks/useRecommendations';
+import { recommendationApi } from '@/lib/api';
 import { QuickMealPlanner } from './OrderDrawer';
 import type {
   MealRecommendationResponse,
@@ -99,8 +100,17 @@ const normalizeRecommendationResponse = (
     return [];
   }
 
+  // Deduplicate items by id
+  const seenIds = new Set<string>();
+  const deduplicatedItems: NormalizedRecommendation[] = [];
+
   if ('items' in data) {
-    return data.items.map((item) => {
+    for (const item of data.items) {
+      const itemId = String(item.item_id);
+      if (seenIds.has(itemId)) {
+        continue; // Skip duplicates
+      }
+      seenIds.add(itemId);
       const record = item as Record<string, unknown>;
       const score = clampScore(item.score);
       const explanation = item.explanation?.trim() ?? '';
@@ -127,7 +137,7 @@ const normalizeRecommendationResponse = (
         (entry) => !entry.toLowerCase().startsWith('restaurant')
       );
 
-      return {
+      deduplicatedItems.push({
         id: String(item.item_id),
         name: item.name?.trim() || 'Recommended item',
         score,
@@ -147,19 +157,24 @@ const normalizeRecommendationResponse = (
             : typeof record.calories === 'string'
               ? Number.parseFloat(record.calories)
               : undefined,
-      };
-    });
+      });
+    }
   }
 
   if ('recommendations' in data) {
-    return data.recommendations.map((item) => {
+    for (const item of data.recommendations) {
+      const itemId = String(item.menu_item_id);
+      if (seenIds.has(itemId)) {
+        continue; // Skip duplicates
+      }
+      seenIds.add(itemId);
       const explanation = item.explanation?.trim() ?? '';
       const restaurantName = extractRestaurant(explanation, item.restaurant?.name);
       const highlights = splitHighlights(explanation).filter(
         (entry) => !entry.toLowerCase().startsWith('restaurant')
       );
 
-      return {
+      deduplicatedItems.push({
         id: String(item.menu_item_id),
         name: item.menu_item?.name ?? 'Recommended item',
         score: clampScore(item.score),
@@ -169,11 +184,11 @@ const normalizeRecommendationResponse = (
         description: item.menu_item?.description,
         price: item.menu_item?.price ?? undefined,
         calories: item.menu_item?.calories ?? undefined,
-      };
-    });
+      });
+    }
   }
 
-  return [];
+  return deduplicatedItems;
 };
 
 export function RecommendationCarousel({
@@ -215,6 +230,24 @@ export function RecommendationCarousel({
   );
 
   const recommendations = useMemo(() => normalizeRecommendationResponse(data), [data]);
+  const [feedbackLoading, setFeedbackLoading] = useState<Record<string, boolean>>({});
+  const [itemFeedback, setItemFeedback] = useState<Record<string, 'like' | 'dislike'>>({});
+
+  // Fetch existing feedback when recommendations change
+  useEffect(() => {
+    const fetchFeedback = async () => {
+      if (recommendations.length > 0 && userId) {
+        const itemIds = recommendations.map((r) => r.id);
+        try {
+          const feedback = await recommendationApi.getFeedback(itemIds, 'meal');
+          setItemFeedback(feedback);
+        } catch (error) {
+          console.error('Failed to fetch feedback:', error);
+        }
+      }
+    };
+    void fetchFeedback();
+  }, [recommendations, userId]);
 
   const handleApplyFilters = () => {
     const filters: RecommendationFiltersPayload = {};
@@ -251,6 +284,29 @@ export function RecommendationCarousel({
 
   const handleModeSelect = (nextMode: RecommendationMode) => {
     setMode(nextMode);
+  };
+
+  const handleFeedback = async (itemId: string, feedbackType: 'like' | 'dislike') => {
+    setFeedbackLoading((prev) => ({ ...prev, [itemId]: true }));
+    try {
+      await recommendationApi.submitFeedback({
+        item_id: itemId,
+        item_type: 'meal',
+        feedback_type: feedbackType,
+      });
+      // Update local feedback state to highlight the button
+      setItemFeedback((prev) => ({
+        ...prev,
+        [itemId]: feedbackType,
+      }));
+      // Optionally refetch recommendations to see updated results
+      // void refetch();
+    } catch (error) {
+      console.error('Failed to submit feedback:', error);
+      // You could add toast notification here
+    } finally {
+      setFeedbackLoading((prev) => ({ ...prev, [itemId]: false }));
+    }
   };
 
   const handleClearFilters = () => {
@@ -769,6 +825,41 @@ export function RecommendationCarousel({
                   <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground">
                     <span>Reasoned by {mode === 'llm' ? 'LLM' : 'baseline'} engine</span>
                     <span>{item.explanation ? 'Explainer available' : 'No explanation'}</span>
+                  </div>
+                
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={itemFeedback[item.id] === 'like' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handleFeedback(item.id, 'like')}
+                      disabled={feedbackLoading[item.id]}
+                      className={`flex-1 gap-2 ${
+                        itemFeedback[item.id] === 'like'
+                          ? 'bg-green-500 text-white hover:bg-green-600 border-green-500'
+                          : 'border-green-300 text-green-700 hover:bg-green-50'
+                      }`}
+                      aria-label="Like this recommendation"
+                    >
+                      <ThumbsUp className="h-4 w-4" />
+                      Like
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={itemFeedback[item.id] === 'dislike' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handleFeedback(item.id, 'dislike')}
+                      disabled={feedbackLoading[item.id]}
+                      className={`flex-1 gap-2 ${
+                        itemFeedback[item.id] === 'dislike'
+                          ? 'bg-red-500 text-white hover:bg-red-600 border-red-500'
+                          : 'border-red-300 text-red-700 hover:bg-red-50'
+                      }`}
+                      aria-label="Dislike this recommendation"
+                    >
+                      <ThumbsDown className="h-4 w-4" />
+                      Dislike
+                    </Button>
                   </div>
                   <Button
                     size="lg"

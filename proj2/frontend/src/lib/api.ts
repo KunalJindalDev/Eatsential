@@ -860,6 +860,22 @@ export type MealRecommendationResponse =
   | MealRecommendationResponseV2
   | MealRecommendationResponseLegacy;
 
+// Feedback types
+export interface FeedbackRequest {
+  item_id: string;
+  item_type: 'meal' | 'restaurant';
+  feedback_type: 'like' | 'dislike';
+  notes?: string;
+}
+
+export interface FeedbackResponse {
+  id: string;
+  item_id: string;
+  item_type: string;
+  feedback_type: string;
+  created_at: string;
+}
+
 // Meal Recommendation API
 export const recommendationApi = {
   getMealRecommendations: async (
@@ -882,6 +898,19 @@ export const recommendationApi = {
     const response = await apiClient.post<MealRecommendationResponse>(
       '/recommend/meal',
       Object.keys(payload).length > 0 ? payload : undefined
+    );
+    return response.data;
+  },
+
+  submitFeedback: async (request: FeedbackRequest): Promise<FeedbackResponse> => {
+    const response = await apiClient.post<FeedbackResponse>('/recommend/feedback', request);
+    return response.data;
+  },
+
+  getFeedback: async (itemIds: string[], itemType: 'meal' | 'restaurant'): Promise<Record<string, 'like' | 'dislike'>> => {
+    const itemIdsParam = itemIds.join(',');
+    const response = await apiClient.get<Record<string, 'like' | 'dislike'>>(
+      `/recommend/feedback?item_ids=${encodeURIComponent(itemIdsParam)}&item_type=${itemType}`
     );
     return response.data;
   },
