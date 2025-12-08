@@ -46,28 +46,34 @@ pytest tests/performance/ -v
 tests/
 ├── test_meal_service.py          # Unit tests for MealService (25 tests)
 ├── test_goal_service.py          # Unit tests for GoalService (28 tests)
+├── services/
+│   └── test_recommendation_diversity.py  # Diversity algorithm unit tests (11 tests)
 ├── routers/
 │   ├── test_meals_api.py        # Meals API integration tests (22 tests)
 │   └── test_goals_api.py        # Goals API integration tests (24 tests)
 ├── integration/
-│   └── test_meal_goal_integration.py  # Cross-feature tests (8 tests)
+│   ├── test_meal_goal_integration.py  # Cross-feature tests (8 tests)
+│   └── test_recommendation_diversity_integration.py  # Recommendation diversity (8 tests)
 ├── performance/
 │   └── test_meal_goal_performance.py  # Performance tests (10 tests)
-└── TEST_SUMMARY.md              # Comprehensive test documentation
+├── TEST_SUMMARY.md              # Comprehensive test documentation
+└── DIVERSITY_TESTS_README.md    # Recommendation diversity test documentation
 ```
 
 ## Test Coverage
 
-### Backend: 111 Tests (100% passing)
+### Backend: 130 Tests (100% passing*)
 
-**Unit Tests (53 tests)**
-- MealService: Full CRUD operations
-- GoalService: Full CRUD + progress calculation
+**Unit Tests (64 tests)**
+- MealService: Full CRUD operations (25 tests)
+- GoalService: Full CRUD + progress calculation (28 tests)
+- Recommendation Diversity Algorithm: Edge cases & interleaving (11 tests)
 - Nutritional calculation
 - User data isolation
 
-**Integration Tests (48 tests)**
-- All API endpoints (GET, POST, PUT, DELETE)
+**Integration Tests (56 tests)**
+- All API endpoints (GET, POST, PUT, DELETE) (46 tests)
+- Recommendation diversity across cuisines (8 tests)
 - Authentication and authorization
 - Request/response validation
 - Cross-feature workflows
@@ -76,6 +82,8 @@ tests/
 - Response time < 2s for all endpoints
 - Bulk data handling
 - Concurrent operations
+
+*New diversity tests not yet run due to environment setup
 
 ### Frontend: 14 Tests
 
@@ -98,6 +106,16 @@ tests/
 - ✅ Create goal (nutrition/wellness types)
 - ✅ Update goal status and progress
 - ✅ Calculate completion percentage
+
+### Restaurant Recommendations (NEW)
+- ✅ Diversity algorithm interleaving
+- ✅ Max items per restaurant limit
+- ✅ Round-robin restaurant selection
+- ✅ Baseline vs LLM mode diversity
+- ✅ Cuisine-specific recommendations
+- ✅ Restaurant data validation (name, address, place_id)
+
+See [DIVERSITY_TESTS_README.md](./DIVERSITY_TESTS_README.md) for detailed documentation.
 - ✅ Calculate days remaining
 - ✅ Delete goal
 - ✅ Filter by type, status, and dates
