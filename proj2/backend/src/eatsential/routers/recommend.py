@@ -32,14 +32,14 @@ def _build_service(db: Session) -> RecommendationService:
     response_model=RecommendationResponse,
     status_code=status.HTTP_200_OK,
 )
-def recommend_meal(
+async def recommend_meal(
     request: RecommendationRequest,
     current_user: CurrentUserDep,
     db: SessionDep,
 ) -> RecommendationResponse:
     """Return personalized meal recommendations using the LLM-enabled engine."""
     service = _build_service(db)
-    return service.get_meal_recommendations(user=current_user, request=request)
+    return await service.get_meal_recommendations(user=current_user, request=request)
 
 
 @router.post(
@@ -47,11 +47,11 @@ def recommend_meal(
     response_model=RecommendationResponse,
     status_code=status.HTTP_200_OK,
 )
-def recommend_restaurant(
+async def recommend_restaurant(
     request: RecommendationRequest,
     current_user: CurrentUserDep,
     db: SessionDep,
 ) -> RecommendationResponse:
     """Return restaurant recommendations using the LLM-enabled engine."""
     service = _build_service(db)
-    return service.get_restaurant_recommendations(user=current_user, request=request)
+    return await service.get_restaurant_recommendations(user=current_user, request=request)
