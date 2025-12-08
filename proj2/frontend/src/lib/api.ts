@@ -40,7 +40,7 @@ const apiClient = axios.create({
 // Request interceptor: automatically add JWT token
 apiClient.interceptors.request.use(
   (config) => {
-    const token = getAuthToken();
+    const token = localStorage.getItem('eatsential_auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -960,6 +960,70 @@ export const githubApi = {
         sort: 'updated',
         direction: 'desc',
         per_page: limit,
+      },
+    });
+    return response.data;
+  },
+};
+
+// Chat API Types
+export interface ChatRequest {
+  message: string;
+  session_id?: string;
+}
+
+export interface ChatResponse {
+  response: string;
+  session_id: string;
+}
+
+export interface ChatMessageResponse {
+  role: string;
+  content: string;
+  id: string;
+  created_at: string;
+}
+
+export interface ChatSessionResponse {
+  id: string;
+  title?: string;
+  created_at: string;
+  updated_at: string;
+  messages: ChatMessageResponse[];
+}
+
+export const chatApi = {
+  // Send message
+  sendMessage: async (data: ChatRequest): Promise<ChatResponse> => {
+    const token = localStorage.getItem("eatsential_auth_token");
+
+    const response = await apiClient.post<ChatResponse>('/chat/', data, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data;
+  },
+
+  // Get all sessions
+  getSessions: async (): Promise<ChatSessionResponse[]> => {
+    const token = localStorage.getItem("eatsential_auth_token");
+
+    const response = await apiClient.get<ChatSessionResponse[]>('/chat/sessions', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data;
+  },
+
+  // Get specific session
+  getSession: async (sessionId: string): Promise<ChatSessionResponse> => {
+    const token = localStorage.getItem("eatsential_auth_token");
+
+    const response = await apiClient.get<ChatSessionResponse>(`/chat/sessions/${sessionId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
       },
     });
     return response.data;

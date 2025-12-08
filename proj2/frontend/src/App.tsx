@@ -16,6 +16,7 @@ import UserManagement from './pages/admin/UserManagement';
 import AllergenManagement from './pages/admin/AllergenManagement';
 import AdminSettings from './pages/admin/AdminSettings';
 import AuditDashboard from './pages/admin/AuditDashboard';
+import { ChatWidget } from './components/chat/ChatWidget';
 
 function App() {
   return (
@@ -49,6 +50,7 @@ function App() {
 
         <Route path="*" element={<NotFound />} />
       </Routes>
+      <ChatWidget />
     </>
   );
 }

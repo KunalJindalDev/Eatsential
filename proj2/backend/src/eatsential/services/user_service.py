@@ -81,7 +81,6 @@ async def create_user(db: Session, user_data: UserCreate) -> UserDB:
 
         # Send verification email
         email_sent = await send_verification_email(db_user.email, verification_token)
-
         if not email_sent:
             # Rollback if email sending fails
             db.delete(db_user)
