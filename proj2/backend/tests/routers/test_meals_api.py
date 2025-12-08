@@ -59,10 +59,10 @@ class TestCreateMealEndpoint:
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_create_meal_validates_meal_time_not_future(
+    def test_create_meal_allows_future_meal_times(
         self, client: TestClient, auth_headers: dict
     ):
-        """Test that meal_time cannot be in the future."""
+        """Test that meal_time can be in the future (within 30 days)."""
         meal_data = {
             "meal_type": MealType.DINNER.value,
             "meal_time": (datetime.now() + timedelta(hours=1)).isoformat(),
@@ -77,16 +77,38 @@ class TestCreateMealEndpoint:
 
         response = client.post("/api/meals", json=meal_data, headers=auth_headers)
 
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
-        assert "future" in response.json()["detail"][0]["msg"].lower()
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        assert data["meal_type"] == MealType.DINNER.value
 
     def test_create_meal_validates_meal_time_within_30_days(
         self, client: TestClient, auth_headers: dict
     ):
-        """Test that meal_time must be within last 30 days."""
+        """Test that meal_time must be within 30 days (past or future)."""
         meal_data = {
             "meal_type": MealType.SNACK.value,
             "meal_time": (datetime.now() - timedelta(days=31)).isoformat(),
+            "food_items": [
+                {
+                    "food_name": "Nuts",
+                    "portion_size": 1.0,
+                    "portion_unit": "oz",
+                }
+            ],
+        }
+
+        response = client.post("/api/meals", json=meal_data, headers=auth_headers)
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+        assert "30 days" in response.json()["detail"][0]["msg"].lower()
+
+    def test_create_meal_validates_meal_time_not_beyond_30_days_future(
+        self, client: TestClient, auth_headers: dict
+    ):
+        """Test that meal_time cannot be more than 30 days in the future."""
+        meal_data = {
+            "meal_type": MealType.SNACK.value,
+            "meal_time": (datetime.now() + timedelta(days=31)).isoformat(),
             "food_items": [
                 {
                     "food_name": "Nuts",

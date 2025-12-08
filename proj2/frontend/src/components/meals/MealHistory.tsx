@@ -371,7 +371,7 @@ export function MealHistory() {
                     >
                       <p className="font-medium text-gray-900">{item.food_name}</p>
                       <p className="mt-1 text-gray-600">
-                        {item.portion_size} {item.portion_unit}
+                        {item.portion_size} {item.portion_unit}{item.portion_size == 1 ? '': 's'} 
                       </p>
                       <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-500">
                         {typeof item.calories === 'number' && (

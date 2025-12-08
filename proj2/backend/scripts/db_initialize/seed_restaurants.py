@@ -13,7 +13,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from eatsential.db.database import DATABASE_URL
-from eatsential.models import MenuItem, Restaurant
+from eatsential.models import AllergenDB, MenuItem, Restaurant
 
 
 def load_restaurant_data():
@@ -57,6 +57,19 @@ def seed_restaurants(session: Session):
                 price=item_data.get("price"),
                 created_at=datetime.now(timezone.utc).replace(tzinfo=None),
             )
+            
+            # Associate allergens if provided
+            allergen_names = item_data.get("allergens", [])
+            if allergen_names:
+                for allergen_name in allergen_names:
+                    allergen = session.query(AllergenDB).filter(
+                        AllergenDB.name.ilike(allergen_name)
+                    ).first()
+                    if allergen:
+                        menu_item.allergens.append(allergen)
+                    else:
+                        print(f"Warning: Allergen '{allergen_name}' not found for menu item '{item_data['name']}'")
+            
             session.add(menu_item)
 
     session.commit()

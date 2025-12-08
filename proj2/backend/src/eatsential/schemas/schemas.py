@@ -395,16 +395,15 @@ class MealCreate(BaseModel):
     @field_validator("meal_time")
     @classmethod
     def validate_meal_time(cls, value: datetime) -> datetime:
-        """Validate meal time is within last 30 days"""
+        """Validate meal time is within 30 days (past or future)"""
         comparison_now = (
             datetime.now(tz=value.tzinfo) if value.tzinfo else datetime.now()
         )
         days_diff = (comparison_now - value).days
 
-        if days_diff > 30:
-            raise ValueError("meal_time must be within the last 30 days")
-        if value > comparison_now:
-            raise ValueError("meal_time cannot be in the future")
+        # Allow up to 30 days in the past OR future
+        if days_diff > 30 or days_diff < -30:
+            raise ValueError("meal_time must be within 30 days (past or future)")
 
         return value
 
@@ -421,7 +420,7 @@ class MealUpdate(BaseModel):
     @field_validator("meal_time")
     @classmethod
     def validate_meal_time(cls, value: Optional[datetime]) -> Optional[datetime]:
-        """Validate meal time is within last 30 days"""
+        """Validate meal time is within 30 days (past or future)"""
         if value is None:
             return value
 
@@ -430,10 +429,9 @@ class MealUpdate(BaseModel):
         )
         days_diff = (comparison_now - value).days
 
-        if days_diff > 30:
-            raise ValueError("meal_time must be within the last 30 days")
-        if value > comparison_now:
-            raise ValueError("meal_time cannot be in the future")
+        # Allow up to 30 days in the past OR future
+        if days_diff > 30 or days_diff < -30:
+            raise ValueError("meal_time must be within 30 days (past or future)")
 
         return value
 
@@ -465,6 +463,46 @@ class MealListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# --- Orders Schemas ---
+
+
+class OrderCreate(BaseModel):
+    """Schema for creating an order from a recommended menu item"""
+
+    menu_item_id: str = Field(..., description="ID of the menu item to order")
+    meal_id: str = Field(..., description="ID of the associated meal log")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrderResponse(BaseModel):
+    """Schema for order response"""
+
+    id: str
+    menu_item_id: str
+    meal_id: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ScheduledOrderResponse(BaseModel):
+    """Extended order response with related meal and menu item data"""
+
+    id: str
+    menu_item_id: str
+    meal_id: str
+    meal_type: str
+    meal_time: datetime
+    menu_item_name: str
+    restaurant_name: str
+    calories: Optional[float] = None
+    price: Optional[float] = None
+    portion_size: float
+    portion_unit: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Goal Tracking Schemas ---

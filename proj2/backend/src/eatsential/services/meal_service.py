@@ -29,13 +29,17 @@ class MealService:
         """
         # Calculate nutritional totals
         total_calories = sum(
-            item.calories for item in meal_data.food_items if item.calories
+            (item.calories or 0) * item.portion_size for item in meal_data.food_items
         )
         total_protein = sum(
-            item.protein_g for item in meal_data.food_items if item.protein_g
+            (item.protein_g or 0) * item.portion_size for item in meal_data.food_items
         )
-        total_carbs = sum(item.carbs_g for item in meal_data.food_items if item.carbs_g)
-        total_fat = sum(item.fat_g for item in meal_data.food_items if item.fat_g)
+        total_carbs = sum(
+            (item.carbs_g or 0) * item.portion_size for item in meal_data.food_items
+        )
+        total_fat = sum(
+            (item.fat_g or 0) * item.portion_size for item in meal_data.food_items
+        )
 
         # Create meal record
         db_meal = MealDB(
@@ -196,15 +200,15 @@ class MealService:
                 )
                 db_meal.food_items.append(db_food_item)
 
-                # Calculate totals
+                # Calculate totals with portion size multiplier
                 if food_item_data.calories:
-                    total_calories += food_item_data.calories
+                    total_calories += food_item_data.calories * food_item_data.portion_size
                 if food_item_data.protein_g:
-                    total_protein += food_item_data.protein_g
+                    total_protein += food_item_data.protein_g * food_item_data.portion_size
                 if food_item_data.carbs_g:
-                    total_carbs += food_item_data.carbs_g
+                    total_carbs += food_item_data.carbs_g * food_item_data.portion_size
                 if food_item_data.fat_g:
-                    total_fat += food_item_data.fat_g
+                    total_fat += food_item_data.fat_g * food_item_data.portion_size
 
             # Update nutritional totals
             db_meal.total_calories = total_calories or 0

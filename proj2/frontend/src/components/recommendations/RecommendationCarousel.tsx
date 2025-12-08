@@ -1,13 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Plus } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
-import { ChefHat, RefreshCw, Sparkles, UtensilsCrossed, Eraser, Bot, Baseline, MapPin } from 'lucide-react';
+import { ChefHat, RefreshCw, Sparkles, UtensilsCrossed, Eraser, Bot, Baseline, ThumbsUp, ThumbsDown, MapPin} from 'lucide-react';
 import { useMealRecommendations } from '@/hooks/useRecommendations';
 import { useGooglePlaceSearch } from "@/hooks/useGooglePlaces";
+import { recommendationApi } from '@/lib/api';
+import { QuickMealPlanner } from './OrderDrawer';
 import type {
   MealRecommendationResponse,
   RecommendationFiltersPayload,
@@ -152,19 +155,28 @@ const normalizeRecommendationResponse = (
     return [];
   }
 
+  // Deduplicate items by id
+  const seenIds = new Set<string>();
+  const deduplicatedItems: NormalizedRecommendation[] = [];
+
   if ('items' in data) {
-    return data.items.map((item) => {
+    for (const item of data.items) {
+      const itemId = String(item.item_id);
+      if (seenIds.has(itemId)) {
+        continue; // Skip duplicates
+      }
+      seenIds.add(itemId);
       const record = item as Record<string, unknown>;
       const score = clampScore(item.score);
       const explanation = item.explanation?.trim() ?? '';
-      
+
       // Use restaurant_name directly from API response (most reliable - from database)
       // DO NOT extract from explanation as LLM may mention wrong restaurants
       const restaurantNameFromAPI = 
         typeof item.restaurant_name === 'string' && item.restaurant_name.trim() ? item.restaurant_name.trim() :
         typeof record.restaurant_name === 'string' && record.restaurant_name.trim() ? record.restaurant_name.trim() :
         undefined;
-      
+
       // Try to get restaurant from other fields as fallback (but not from explanation)
       const restaurantField = (() => {
         if (restaurantNameFromAPI) {
@@ -190,7 +202,7 @@ const normalizeRecommendationResponse = (
         (entry) => !entry.toLowerCase().startsWith('restaurant')
       );
 
-      return {
+      deduplicatedItems.push({
         id: String(item.item_id),
         name: item.name?.trim() || 'Recommended item',
         score,
@@ -211,14 +223,19 @@ const normalizeRecommendationResponse = (
             : typeof record.calories === 'string'
               ? Number.parseFloat(record.calories)
               : undefined,
-      };
-    });
+      });
+    }
   }
 
   if ('recommendations' in data) {
-    return data.recommendations.map((item) => {
+    for (const item of data.recommendations) {
+      const itemId = String(item.menu_item_id);
+      if (seenIds.has(itemId)) {
+        continue; // Skip duplicates
+      }
+      seenIds.add(itemId);
       const explanation = item.explanation?.trim() ?? '';
-      
+
       // Use restaurant_name from API (database) - never extract from explanation
       // The LLM explanation may contain incorrect restaurant names
       const restaurantName = 
@@ -232,7 +249,7 @@ const normalizeRecommendationResponse = (
         (entry) => !entry.toLowerCase().startsWith('restaurant')
       );
 
-      return {
+      deduplicatedItems.push({
         id: String(item.item_id),
         name: item.name ?? 'Recommended item',
         score: clampScore(item.score),
@@ -243,13 +260,12 @@ const normalizeRecommendationResponse = (
         description: item.menu_item?.description,
         price: item.menu_item?.price ?? undefined,
         calories: item.menu_item?.calories ?? undefined,
-      };
-    });
+      });
+    }
   }
 
-  return [];
+  return deduplicatedItems;
 };
-
 
 interface Props {
   restaurant?: string;
@@ -348,7 +364,6 @@ export default function RecommendationMapPreview({ restaurant, placeId }: Props)
   );
 }
 
-
 export function RecommendationCarousel({
   userId,
   initialFilters,
@@ -367,6 +382,10 @@ export function RecommendationCarousel({
     cuisine: initialFilters?.cuisine ?? [],
     priceRange: initialFilters?.price_range ?? '',
   }));
+  const [openPlanner, setOpenPlanner] = useState(false);
+  const [selectedMealName, setSelectedMealName] = useState<string | undefined>(undefined);
+  const [selectedMealCalories, setSelectedMealCalories] = useState<string | undefined>(undefined);
+  const [selectedMenuItemId, setSelectedMenuItemId] = useState<string | undefined>(undefined);
 
   // Track whether user has manually requested recommendations
   const [hasRequestedRecommendations, setHasRequestedRecommendations] = useState(false);
@@ -384,6 +403,24 @@ export function RecommendationCarousel({
   );
 
   const recommendations = useMemo(() => normalizeRecommendationResponse(data), [data]);
+  const [feedbackLoading, setFeedbackLoading] = useState<Record<string, boolean>>({});
+  const [itemFeedback, setItemFeedback] = useState<Record<string, 'like' | 'dislike'>>({});
+
+  // Fetch existing feedback when recommendations change
+  useEffect(() => {
+    const fetchFeedback = async () => {
+      if (recommendations.length > 0 && userId) {
+        const itemIds = recommendations.map((r) => r.id);
+        try {
+          const feedback = await recommendationApi.getFeedback(itemIds, 'meal');
+          setItemFeedback(feedback);
+        } catch (error) {
+          console.error('Failed to fetch feedback:', error);
+        }
+      }
+    };
+    void fetchFeedback();
+  }, [recommendations, userId]);
 
   const handleApplyFilters = () => {
     const filters: RecommendationFiltersPayload = {};
@@ -422,12 +459,42 @@ export function RecommendationCarousel({
     setMode(nextMode);
   };
 
+  const handleFeedback = async (itemId: string, feedbackType: 'like' | 'dislike') => {
+    setFeedbackLoading((prev) => ({ ...prev, [itemId]: true }));
+    try {
+      await recommendationApi.submitFeedback({
+        item_id: itemId,
+        item_type: 'meal',
+        feedback_type: feedbackType,
+      });
+      // Update local feedback state to highlight the button
+      setItemFeedback((prev) => ({
+        ...prev,
+        [itemId]: feedbackType,
+      }));
+      // Optionally refetch recommendations to see updated results
+      // void refetch();
+    } catch (error) {
+      console.error('Failed to submit feedback:', error);
+      // You could add toast notification here
+    } finally {
+      setFeedbackLoading((prev) => ({ ...prev, [itemId]: false }));
+    }
+  };
+
   const handleClearFilters = () => {
     setFormState({
       diet: [],
       cuisine: [],
       priceRange: '',
     });
+  };
+
+  const loadMealPlanner = (menuItemId: string, name: string, calories: string): void => {
+    setSelectedMenuItemId(menuItemId);
+    setSelectedMealName(name);
+    setSelectedMealCalories(calories);
+    setOpenPlanner(true);
   };
 
   // Initial state - user hasn't requested recommendations yet
@@ -694,251 +761,297 @@ export function RecommendationCarousel({
   }
 
   return (
-    <Card className="border-gray-100 bg-linear-to-br from-white to-emerald-50/30 transition-shadow hover:shadow-lg">
-      <CardHeader>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-3">
-            <Sparkles className="mt-1 h-5 w-5 text-emerald-600" />
-            <div>
-              <CardTitle>Meal Recommendations</CardTitle>
-              <CardDescription>
-                Personalized suggestions powered by{' '}
-                {mode === 'llm' ? 'LLM insights' : 'baseline heuristics'}
-              </CardDescription>
+    <>
+      <Card className="border-gray-100 bg-linear-to-br from-white to-emerald-50/30 transition-shadow hover:shadow-lg">
+        <CardHeader>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3">
+              <Sparkles className="mt-1 h-5 w-5 text-emerald-600" />
+              <div>
+                <CardTitle>Meal Recommendations</CardTitle>
+                <CardDescription>
+                  Personalized suggestions powered by{' '}
+                  {mode === 'llm' ? 'LLM insights' : 'baseline heuristics'}
+                </CardDescription>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-gray-600 uppercase">Engine</span>
+              {(['llm', 'baseline'] as RecommendationMode[]).map((option) => (
+                <Button
+                  key={option}
+                  type="button"
+                  size="sm"
+                  variant={mode === option ? 'default' : 'outline'}
+                  onClick={() => handleModeSelect(option)}
+                  className={
+                    mode === option
+                      ? 'gap-2 bg-emerald-500 text-white hover:bg-emerald-600'
+                      : 'gap-2 border-gray-300 text-gray-700 hover:bg-gray-50'
+                  }
+                >
+                  {option === 'llm' ? (
+                    <>
+                      <Bot className="h-4 w-4" />
+                      AI
+                    </>
+                  ) : (
+                    <>
+                      <Baseline className="h-4 w-4" />
+                      Baseline
+                    </>
+                  )}
+                </Button>
+              ))}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                aria-label="Refresh recommendations"
+                className="text-emerald-700 hover:bg-emerald-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+              </Button>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-gray-600 uppercase">Engine</span>
-            {(['llm', 'baseline'] as RecommendationMode[]).map((option) => (
-              <Button
-                key={option}
-                type="button"
-                size="sm"
-                variant={mode === option ? 'default' : 'outline'}
-                onClick={() => handleModeSelect(option)}
-                className={
-                  mode === option
-                    ? 'gap-2 bg-emerald-500 text-white hover:bg-emerald-600'
-                    : 'gap-2 border-gray-300 text-gray-700 hover:bg-gray-50'
-                }
-              >
-                {option === 'llm' ? (
-                  <>
-                    <Bot className="h-4 w-4" />
-                    AI
-                  </>
-                ) : (
-                  <>
-                    <Baseline className="h-4 w-4" />
-                    Baseline
-                  </>
-                )}
-              </Button>
-            ))}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleRefresh}
-              aria-label="Refresh recommendations"
-              className="text-emerald-700 hover:bg-emerald-50"
-            >
-              <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid gap-4 rounded-lg bg-white/80" aria-label="Recommendation filters">
-          <div className="space-y-2">
-            <Label>Dietary Restrictions</Label>
-            <ToggleGroup
-              type="multiple"
-              value={formState.diet}
-              onValueChange={(value) => setFormState((prev) => ({ ...prev, diet: value }))}
-              className="flex-wrap justify-start"
-              variant="outline"
-              spacing={2}
-              size="sm"
-            >
-              {COMMON_DIETS.map((diet) => (
-                <ToggleGroupItem
-                  key={diet}
-                  value={diet}
-                  className="border-gray-300 text-gray-700 capitalize hover:bg-gray-50 data-[state=on]:border-emerald-500 data-[state=on]:bg-emerald-500 data-[state=on]:text-white"
-                >
-                  {diet}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Preferred Cuisines</Label>
-            <ToggleGroup
-              type="multiple"
-              value={formState.cuisine}
-              onValueChange={(value) => setFormState((prev) => ({ ...prev, cuisine: value }))}
-              className="flex-wrap justify-start"
-              variant="outline"
-              spacing={2}
-              size="sm"
-            >
-              {COMMON_CUISINES.map((cuisine) => (
-                <ToggleGroupItem
-                  key={cuisine}
-                  value={cuisine}
-                  className="border-gray-300 text-gray-700 capitalize hover:bg-gray-50 data-[state=on]:border-emerald-500 data-[state=on]:bg-emerald-500 data-[state=on]:text-white"
-                >
-                  {cuisine}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-4 rounded-lg bg-white/80" aria-label="Recommendation filters">
             <div className="space-y-2">
-              <Label>Price Range</Label>
+              <Label>Dietary Restrictions</Label>
               <ToggleGroup
-                type="single"
-                value={formState.priceRange}
-                onValueChange={(value) =>
-                  setFormState((prev) => ({ ...prev, priceRange: value || '' }))
-                }
+                type="multiple"
+                value={formState.diet}
+                onValueChange={(value) => setFormState((prev) => ({ ...prev, diet: value }))}
                 className="flex-wrap justify-start"
                 variant="outline"
                 spacing={2}
                 size="sm"
               >
-                {priceRanges.map((range) => (
+                {COMMON_DIETS.map((diet) => (
                   <ToggleGroupItem
-                    key={range.value}
-                    value={range.value}
-                    className="border-gray-300 text-gray-700 hover:bg-gray-50 data-[state=on]:border-emerald-500 data-[state=on]:bg-emerald-500 data-[state=on]:text-white"
+                    key={diet}
+                    value={diet}
+                    className="border-gray-300 text-gray-700 capitalize hover:bg-gray-50 data-[state=on]:border-emerald-500 data-[state=on]:bg-emerald-500 data-[state=on]:text-white"
                   >
-                    {range.label}
+                    {diet}
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
             </div>
 
-            <div className="flex items-end gap-2">
-              <Button
-                type="button"
+            <div className="space-y-2">
+              <Label>Preferred Cuisines</Label>
+              <ToggleGroup
+                type="multiple"
+                value={formState.cuisine}
+                onValueChange={(value) => setFormState((prev) => ({ ...prev, cuisine: value }))}
+                className="flex-wrap justify-start"
                 variant="outline"
+                spacing={2}
                 size="sm"
-                onClick={handleClearFilters}
-                disabled={
-                  formState.diet.length === 0 &&
-                  formState.cuisine.length === 0 &&
-                  !formState.priceRange
-                }
-                className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-50"
-                aria-label="Clear filters"
               >
-                <Eraser className="h-4 w-4" />
-                Clear Filters
-              </Button>
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                onClick={handleUpdateRecommendations}
-                className="gap-2 bg-emerald-500 text-white hover:bg-emerald-600"
-                aria-label="Update recommendations"
-              >
-                <Sparkles className="h-4 w-4" />
-                Update
-              </Button>
+                {COMMON_CUISINES.map((cuisine) => (
+                  <ToggleGroupItem
+                    key={cuisine}
+                    value={cuisine}
+                    className="border-gray-300 text-gray-700 capitalize hover:bg-gray-50 data-[state=on]:border-emerald-500 data-[state=on]:bg-emerald-500 data-[state=on]:text-white"
+                  >
+                    {cuisine}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Price Range</Label>
+                <ToggleGroup
+                  type="single"
+                  value={formState.priceRange}
+                  onValueChange={(value) =>
+                    setFormState((prev) => ({ ...prev, priceRange: value || '' }))
+                  }
+                  className="flex-wrap justify-start"
+                  variant="outline"
+                  spacing={2}
+                  size="sm"
+                >
+                  {priceRanges.map((range) => (
+                    <ToggleGroupItem
+                      key={range.value}
+                      value={range.value}
+                      className="border-gray-300 text-gray-700 hover:bg-gray-50 data-[state=on]:border-emerald-500 data-[state=on]:bg-emerald-500 data-[state=on]:text-white"
+                    >
+                      {range.label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
+
+              <div className="flex items-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearFilters}
+                  disabled={
+                    formState.diet.length === 0 &&
+                    formState.cuisine.length === 0 &&
+                    !formState.priceRange
+                  }
+                  className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-50"
+                  aria-label="Clear filters"
+                >
+                  <Eraser className="h-4 w-4" />
+                  Clear Filters
+                </Button>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={handleUpdateRecommendations}
+                  className="gap-2 bg-emerald-500 text-white hover:bg-emerald-600"
+                  aria-label="Update recommendations"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Update
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {recommendations.map((item) => {
-            const scorePercent = Math.round(item.score * 100);
-            const metaBadges = [
-              item.price !== undefined ? `$${item.price.toFixed(2)}` : undefined,
-              item.calories !== undefined ? `${Math.round(item.calories)} kcal` : undefined,
-            ].filter(Boolean) as string[];
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {recommendations.map((item) => {
+              const scorePercent = Math.round(item.score * 100);
+              const metaBadges = [
+                item.price !== undefined ? `$${item.price.toFixed(2)}` : undefined,
+                item.calories !== undefined ? `${Math.round(item.calories)} kcal` : undefined,
+              ].filter(Boolean) as string[];
 
-            return (
-              <div
-                key={item.id}
-                className="flex h-full flex-col rounded-lg border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
-              >
-                <div className="mb-4 flex items-start justify-between gap-2">
-                  <div>
-                    <div className="mb-1 flex items-center gap-2">
-                      <Badge
-                        variant={scorePercent >= 80 ? 'default' : 'secondary'}
-                        className={
-                          scorePercent >= 80
-                            ? 'bg-emerald-500 text-xs font-semibold text-white'
-                            : 'bg-emerald-100 text-xs font-semibold text-emerald-800'
-                        }
-                      >
-                        {scorePercent}% match
-                      </Badge>
+              return (
+                <div
+                  key={item.id}
+                  className="flex h-full flex-col rounded-lg border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
+                >
+                  <div className="mb-4 flex items-start justify-between gap-2">
+                    <div>
+                      <div className="mb-1 flex items-center gap-2">
+                        <Badge
+                          variant={scorePercent >= 80 ? 'default' : 'secondary'}
+                          className={
+                            scorePercent >= 80
+                              ? 'bg-emerald-500 text-xs font-semibold text-white'
+                              : 'bg-emerald-100 text-xs font-semibold text-emerald-800'
+                          }
+                        >
+                          {scorePercent}% match
+                        </Badge>
+                      </div>
+                      <p className="text-base font-semibold text-gray-900">{item.name}</p>
+                      {item.restaurant && (
+                        <p className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <ChefHat className="h-4 w-4 text-gray-500" />
+                          {item.restaurant}
+                        </p>
+                      )}
                     </div>
-                    <p className="text-base font-semibold text-gray-900">{item.name}</p>
-                    {item.restaurant && (
-                      <p className="flex items-center gap-1 text-sm text-muted-foreground">
-                        <ChefHat className="h-4 w-4 text-gray-500" />
-                        {item.restaurant}
-                      </p>
-                    )}
+                  </div>
+
+                  <div className="mb-2 *:space-y-2">
+                    <Progress
+                      value={scorePercent}
+                      className="h-2 bg-gray-100 [&>div]:bg-emerald-500"
+                    />
+                    <p className="text-xs text-muted-foreground">Explanation:</p>
+                  </div>
+
+                  {item.description && (
+                    <p className="mb-3 line-clamp-3 text-sm text-muted-foreground">
+                      {item.description}
+                    </p>
+                  )}
+
+                  {metaBadges.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {metaBadges.map((label) => (
+                        <Badge
+                          key={`${item.id}-${label}`}
+                          variant="secondary"
+                          className="bg-emerald-50 text-gray-700"
+                        >
+                          {label}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+
+                  {item.highlights.length > 0 && (
+                    <ul className="mb-4 space-y-1 text-sm text-muted-foreground">
+                      {item.highlights.map((highlight, index) => (
+                        <li key={`${item.id}-highlight-${index}`}>• {highlight}</li>
+                      ))}
+                    </ul>
+                  )}
+                
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={itemFeedback[item.id] === 'like' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handleFeedback(item.id, 'like')}
+                      disabled={feedbackLoading[item.id]}
+                      className={`flex-1 gap-2 ${
+                        itemFeedback[item.id] === 'like'
+                          ? 'bg-green-500 text-white hover:bg-green-600 border-green-500'
+                          : 'border-green-300 text-green-700 hover:bg-green-50'
+                      }`}
+                      aria-label="Like this recommendation"
+                    >
+                      <ThumbsUp className="h-4 w-4" />
+                      Like
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={itemFeedback[item.id] === 'dislike' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handleFeedback(item.id, 'dislike')}
+                      disabled={feedbackLoading[item.id]}
+                      className={`flex-1 gap-2 ${
+                        itemFeedback[item.id] === 'dislike'
+                          ? 'bg-red-500 text-white hover:bg-red-600 border-red-500'
+                          : 'border-red-300 text-red-700 hover:bg-red-50'
+                      }`}
+                      aria-label="Dislike this recommendation"
+                    >
+                      <ThumbsDown className="h-4 w-4" />
+                      Dislike
+                    </Button>
+                  </div>
+                  <Button
+                    size="lg"
+                    onClick={() => loadMealPlanner(item.id, item.name, item.calories !== undefined ? `${Math.round(item.calories)}` : '0')}
+                    className="px-4 w-full gap-2 bg-emerald-600 hover:bg-emerald-700 margin-top:15px"
+                    style={{marginTop:10}}
+                  >
+                    <Plus className="size-5" />
+                    Schedule Meal
+                  </Button>
+                  {/* Google Maps Mini Preview */}
+                  <RecommendationMapPreview restaurant={item.restaurant} placeId={item.restaurant_place_id} />
+
+                  <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Reasoned by {mode === 'llm' ? 'LLM' : 'baseline'} engine</span>
+                    <span>{item.explanation ? 'Explainer available' : 'No explanation'}</span>
                   </div>
                 </div>
-
-                <div className="mb-2 *:space-y-2">
-                  <Progress
-                    value={scorePercent}
-                    className="h-2 bg-gray-100 [&>div]:bg-emerald-500"
-                  />
-                  <p className="text-xs text-muted-foreground">Explanation:</p>
-                </div>
-
-                {item.description && (
-                  <p className="mb-3 line-clamp-3 text-sm text-muted-foreground">
-                    {item.description}
-                  </p>
-                )}
-
-                {metaBadges.length > 0 && (
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {metaBadges.map((label) => (
-                      <Badge
-                        key={`${item.id}-${label}`}
-                        variant="secondary"
-                        className="bg-emerald-50 text-gray-700"
-                      >
-                        {label}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-
-                {item.highlights.length > 0 && (
-                  <ul className="mb-4 space-y-1 text-sm text-muted-foreground">
-                    {item.highlights.map((highlight, index) => (
-                      <li key={`${item.id}-highlight-${index}`}>• {highlight}</li>
-                    ))}
-                  </ul>
-                )}
-
-                {/* Google Maps Mini Preview */}
-                <RecommendationMapPreview restaurant={item.restaurant} placeId={item.restaurant_place_id} />
-
-                <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Reasoned by {mode === 'llm' ? 'LLM' : 'baseline'} engine</span>
-                  <span>{item.explanation ? 'Explainer available' : 'No explanation'}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+      <QuickMealPlanner open={openPlanner} onOpenChange={setOpenPlanner} mealName={selectedMealName} mealCalories={selectedMealCalories} menuItemId={selectedMenuItemId} />
+    </>
   );
 }

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { DashboardNavbar } from '@/components/DashboardNavbar';
 import { WellnessOverviewCard } from '@/components/wellness';
 import { RecommendationCarousel } from '@/components/recommendations/RecommendationCarousel';
+import { ScheduledMealsWidget } from '@/components/dashboard/ScheduledMealsWidget';
 import {
   DailyCalorieGoal,
   MacronutrientBalance,
@@ -95,6 +96,11 @@ function Dashboard() {
 
         {/* Meal Recommendations */}
         {userId && <RecommendationCarousel userId={userId} />}
+
+        {/* Scheduled Meals Widget */}
+        <div className="mb-8">
+          <ScheduledMealsWidget />
+        </div>
 
         {/* Other Dashboard Cards */}
       </main>

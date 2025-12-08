@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { format } from 'date-fns';
+import { useState, useEffect } from 'react';
+import { format, differenceInMinutes } from 'date-fns';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Calendar as CalendarIcon, Loader2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Loader2, Trash2 } from 'lucide-react';
 import * as z from 'zod';
 
 import {
@@ -27,8 +27,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { useLogMeal } from '@/hooks/useMeals';
-import type { MealTypeOption } from '@/lib/api';
+import { ordersApi, type ScheduledOrderResponse, type MealTypeOption } from '@/lib/api';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 
 const MEAL_TYPES: { label: string; value: MealTypeOption }[] = [
@@ -37,8 +37,6 @@ const MEAL_TYPES: { label: string; value: MealTypeOption }[] = [
   { label: 'Dinner', value: 'dinner' },
   { label: 'Snack', value: 'snack' },
 ];
-
-const DEFAULT_PORTION_UNITS = ['serving', 'cup', 'g', 'oz', 'ml', 'slice', 'piece'] as const;
 
 const numberString = z
   .string()
@@ -51,7 +49,7 @@ const numberString = z
     'Enter a non-negative number'
   );
 
-const quickMealSchema = z.object({
+const orderEditSchema = z.object({
   meal_type: z.enum(['breakfast', 'lunch', 'dinner', 'snack']),
   meal_time: z
     .string()
@@ -72,18 +70,40 @@ const quickMealSchema = z.object({
   fat_g: numberString,
 });
 
-type QuickMealFormValues = z.infer<typeof quickMealSchema>;
+type OrderEditFormValues = z.infer<typeof orderEditSchema>;
 
-const getDefaultDateTime = () => format(new Date(), "yyyy-MM-dd'T'HH:mm");
-
-interface QuickMealDrawerProps {
+interface OrderEditDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  order: ScheduledOrderResponse;
 }
 
-export function QuickMealDrawer({ open, onOpenChange }: QuickMealDrawerProps) {
+export function OrderEditDrawer({ open, onOpenChange, order }: OrderEditDrawerProps) {
   const [isMealDateOpen, setIsMealDateOpen] = useState(false);
+  const [mealTimeValidationError, setMealTimeValidationError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
+  const hasTimezone = (value: string) => /([zZ]|[+-]\d{2}:\d{2})$/.test(value);
+
+  const coerceToDate = (value: string): Date | undefined => {
+    if (!value) return undefined;
+    const normalized = hasTimezone(value) ? value : `${value}Z`;
+    const parsed = new Date(normalized);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  };
+
+  const formatMealTime = (isoTimestamp: string) => {
+    try {
+      const parsed = coerceToDate(isoTimestamp);
+      if (!parsed) {
+        return isoTimestamp;
+      }
+      return parsed;
+    } catch {
+      return isoTimestamp;
+    }
+  };
+  
   const {
     register,
     handleSubmit,
@@ -91,32 +111,87 @@ export function QuickMealDrawer({ open, onOpenChange }: QuickMealDrawerProps) {
     setValue,
     watch,
     reset,
-  } = useForm<QuickMealFormValues>({
-    resolver: zodResolver(quickMealSchema),
+  } = useForm<OrderEditFormValues>({
+    resolver: zodResolver(orderEditSchema),
     defaultValues: {
-      meal_type: 'breakfast',
-      meal_time: getDefaultDateTime(),
-      food_name: '',
-      portion_size: '',
-      portion_unit: 'serving',
-      calories: '',
+      meal_type: order.meal_type as MealTypeOption,
+      meal_time: format(new Date(order.meal_time), "yyyy-MM-dd'T'HH:mm"),
+      food_name: order.menu_item_name,
+      portion_size: order.portion_size.toString(),
+      portion_unit: order.portion_unit,
+      calories: order.calories?.toString() || '0',
       protein_g: '',
       carbs_g: '',
       fat_g: '',
     },
   });
 
-  const mealTime = watch('meal_time');
+  // Update form when order changes
+  useEffect(() => {
+    reset({
+      meal_type: order.meal_type as MealTypeOption,
+      meal_time: format(new Date(formatMealTime(order.meal_time)), "yyyy-MM-dd'T'HH:mm"),
+      food_name: order.menu_item_name,
+      portion_size: order.portion_size.toString(),
+      portion_unit: order.portion_unit,
+      calories: order.calories?.toString() || '0',
+      protein_g: '',
+      carbs_g: '',
+      fat_g: '',
+    });
+  }, [order, reset]);
 
-  const { mutate: logMeal, isPending } = useLogMeal({
+  const mealTime = watch('meal_time');
+  const now = new Date();
+  const originalMealTime = new Date(order.meal_time);
+
+  // Check if order can be deleted (more than 30 minutes in future)
+  const canDelete = differenceInMinutes(originalMealTime, now) > 30;
+
+  // Mutation for updating order
+  const { mutate: updateOrder, isPending: isUpdating } = useMutation({
+    mutationFn: async (data: OrderEditFormValues) => {
+      return ordersApi.updateOrderMeal(order.id, {
+        meal_type: data.meal_type,
+        meal_time: new Date(data.meal_time).toISOString(),
+        food_items: [
+          {
+            food_name: data.food_name,
+            portion_size: Number(data.portion_size),
+            portion_unit: data.portion_unit,
+            calories: data.calories ? Number(data.calories) : undefined,
+            protein_g: data.protein_g ? Number(data.protein_g) : undefined,
+            carbs_g: data.carbs_g ? Number(data.carbs_g) : undefined,
+            fat_g: data.fat_g ? Number(data.fat_g) : undefined,
+          },
+        ],
+      });
+    },
     onSuccess: () => {
-      toast.success('Meal logged successfully!');
-      reset();
+      toast.success('Order updated successfully!');
+      queryClient.invalidateQueries({ queryKey: ['scheduledOrders'] });
       onOpenChange(false);
     },
-    onError: (error) => {
+    onError: (error: unknown) => {
       const message =
-        error instanceof Error ? error.message : 'Failed to log meal. Please try again.';
+        error instanceof Error ? error.message : 'Failed to update order. Please try again.';
+      toast.error(message);
+    },
+  });
+
+  // Mutation for deleting order
+  const { mutate: deleteOrder, isPending: isDeleting } = useMutation({
+    mutationFn: async () => {
+      return ordersApi.deleteOrder(order.id);
+    },
+    onSuccess: () => {
+      toast.success('Order deleted successfully!');
+      queryClient.invalidateQueries({ queryKey: ['scheduledOrders'] });
+      onOpenChange(false);
+    },
+    onError: (error: unknown) => {
+      const message =
+        error instanceof Error ? error.message : 'Failed to delete order. Please try again.';
       toast.error(message);
     },
   });
@@ -127,32 +202,16 @@ export function QuickMealDrawer({ open, onOpenChange }: QuickMealDrawerProps) {
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   };
 
-  const onSubmit = (data: QuickMealFormValues) => {
-    const payload = {
-      meal_type: data.meal_type,
-      meal_time: new Date(data.meal_time).toISOString(),
-      food_items: [
-        {
-          food_name: data.food_name,
-          portion_size: Number(data.portion_size),
-          portion_unit: data.portion_unit,
-          calories: data.calories ? Number(data.calories) : undefined,
-          protein_g: data.protein_g ? Number(data.protein_g) : undefined,
-          carbs_g: data.carbs_g ? Number(data.carbs_g) : undefined,
-          fat_g: data.fat_g ? Number(data.fat_g) : undefined,
-        },
-      ],
-    };
-
-    logMeal(payload);
+  const onSubmit = (data: OrderEditFormValues) => {
+    updateOrder(data);
   };
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent className="max-h-[95vh]">
         <DrawerHeader>
-          <DrawerTitle>Quick Meal Log</DrawerTitle>
-          <DrawerDescription>Log a single food item quickly</DrawerDescription>
+          <DrawerTitle>Edit Order</DrawerTitle>
+          <DrawerDescription>Update your scheduled meal order</DrawerDescription>
         </DrawerHeader>
 
         <form
@@ -210,11 +269,16 @@ export function QuickMealDrawer({ open, onOpenChange }: QuickMealDrawerProps) {
                           const next = new Date(date);
                           const baseline = selectedDate ?? new Date();
                           next.setHours(baseline.getHours(), baseline.getMinutes(), 0, 0);
+                          setMealTimeValidationError(null);
+                          // Check if the meal_time is being reduced to below 30 minutes of the current time
+                          if (differenceInMinutes(originalMealTime, next) > 0 && differenceInMinutes(next, now) < 30) {
+                            setMealTimeValidationError('Cannot reduce meal time to below 30 minutes of the current time');
+                          }
                           setValue('meal_time', format(next, "yyyy-MM-dd'T'HH:mm"));
                           setIsMealDateOpen(false);
                         }
                       }}
-                      disabled={(date) => date > new Date()}
+                      disabled={(date) => date < now}
                     />
                   </PopoverContent>
                 </Popover>
@@ -248,6 +312,12 @@ export function QuickMealDrawer({ open, onOpenChange }: QuickMealDrawerProps) {
                       const base = parseMealTimeValue(mealTime) ?? new Date();
                       const next = new Date(base);
                       next.setHours(hours, minutes, 0, 0);
+                      
+                      setMealTimeValidationError(null);
+                      // Check if the meal_time is being reduced to below 30 minutes of the current time
+                      if (differenceInMinutes(originalMealTime, next) > 0 && differenceInMinutes(next, now) < 30) {
+                        setMealTimeValidationError('Cannot reduce meal time to below 30 minutes of the current time');
+                      }
                       setValue('meal_time', format(next, "yyyy-MM-dd'T'HH:mm"));
                     }}
                     className={cn(
@@ -258,6 +328,7 @@ export function QuickMealDrawer({ open, onOpenChange }: QuickMealDrawerProps) {
                 </div>
               </div>
               {errors.meal_time && <FieldError>{errors.meal_time.message}</FieldError>}
+              {mealTimeValidationError && <FieldError>{mealTimeValidationError}</FieldError>}
             </FieldGroup>
           </div>
 
@@ -265,55 +336,31 @@ export function QuickMealDrawer({ open, onOpenChange }: QuickMealDrawerProps) {
           <FieldGroup className="gap-1">
             <FieldLabel>Food Name</FieldLabel>
             <Field>
-              <Input {...register('food_name')} placeholder="e.g., Grilled Chicken Breast" />
+              <Input type="text" {...register('food_name')} />
             </Field>
             {errors.food_name && <FieldError>{errors.food_name.message}</FieldError>}
           </FieldGroup>
-
-          {/* Portion */}
-          <div className="grid gap-3 md:grid-cols-2">
-            <FieldGroup className="gap-1">
-              <FieldLabel>Portion Size</FieldLabel>
-              <Field>
-                <Input {...register('portion_size')} type="number" step="0.1" placeholder="1" />
-              </Field>
-              {errors.portion_size && <FieldError>{errors.portion_size.message}</FieldError>}
-            </FieldGroup>
-
-            <FieldGroup className="gap-1">
-              <FieldLabel>Unit</FieldLabel>
-              <Field>
-                <Select
-                  value={watch('portion_unit')}
-                  onValueChange={(value) => setValue('portion_unit', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select unit" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DEFAULT_PORTION_UNITS.map((unit) => (
-                      <SelectItem key={unit} value={unit}>
-                        {unit}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              {errors.portion_unit && <FieldError>{errors.portion_unit.message}</FieldError>}
-            </FieldGroup>
-          </div>
 
           {/* Nutrition Label */}
           <div className="gap-1 text-center">
             Nutrition Information per Portion (Optional)
           </div>
 
-          {/* Nutrition*/}
+          {/* Portion */}
+          <FieldGroup className="gap-1">
+            <FieldLabel>Portions</FieldLabel>
+            <Field>
+              <Input {...register('portion_size')} type="number" step="0.5" min="0" />
+            </Field>
+            {errors.portion_size && <FieldError>{errors.portion_size.message}</FieldError>}
+          </FieldGroup>
+
+          {/* Nutrition */}
           <div className="grid gap-3 md:grid-cols-2">
             <FieldGroup className="gap-1">
               <FieldLabel>Calories</FieldLabel>
               <Field>
-                <Input {...register('calories')} type="number" step="1" placeholder="0" />
+                <Input type="text" {...register('calories')} min="0" />
               </Field>
               {errors.calories && <FieldError>{errors.calories.message}</FieldError>}
             </FieldGroup>
@@ -321,45 +368,76 @@ export function QuickMealDrawer({ open, onOpenChange }: QuickMealDrawerProps) {
             <FieldGroup className="gap-1">
               <FieldLabel>Protein (g)</FieldLabel>
               <Field>
-                <Input {...register('protein_g')} type="number" step="0.1" placeholder="0" />
+                <Input {...register('protein_g')} type="number" step="1" placeholder="0" min="0" />
               </Field>
               {errors.protein_g && <FieldError>{errors.protein_g.message}</FieldError>}
             </FieldGroup>
 
             <FieldGroup className="gap-1">
-              <FieldLabel>Carbs (g)</FieldLabel>
+              <FieldLabel>Carbs (g) </FieldLabel>
               <Field>
-                <Input {...register('carbs_g')} type="number" step="0.1" placeholder="0" />
+                <Input {...register('carbs_g')} type="number" step="1" placeholder="0" min="0" />
               </Field>
               {errors.carbs_g && <FieldError>{errors.carbs_g.message}</FieldError>}
             </FieldGroup>
 
             <FieldGroup className="gap-1">
-              <FieldLabel>Fat (g)</FieldLabel>
+              <FieldLabel>Fat (g) </FieldLabel>
               <Field>
-                <Input {...register('fat_g')} type="number" step="0.1" placeholder="0" />
+                <Input {...register('fat_g')} type="number" step="1" placeholder="0" min="0" />
               </Field>
               {errors.fat_g && <FieldError>{errors.fat_g.message}</FieldError>}
             </FieldGroup>
           </div>
 
-          <DrawerFooter className="px-0">
+          <DrawerFooter className="flex flex-col gap-2 px-0 sm:flex-row">
             <Button
               type="submit"
-              disabled={isPending}
-              className="w-full bg-purple-600 hover:bg-purple-700"
+              disabled={isUpdating || isDeleting || !!mealTimeValidationError}
+              className="flex-1 bg-blue-600 hover:bg-blue-700"
             >
-              {isPending ? (
+              {isUpdating ? (
                 <>
                   <Loader2 className="mr-2 size-4 animate-spin" />
-                  Submitting...
+                  Updating...
                 </>
               ) : (
-                'Submit'
+                'Update Order'
               )}
             </Button>
+
+            {canDelete && (
+              <Button
+                type="button"
+                disabled={isUpdating || isDeleting}
+                onClick={() => {
+                  if (
+                    confirm(
+                      'Are you sure you want to delete this order? This action cannot be undone.'
+                    )
+                  ) {
+                    deleteOrder();
+                  }
+                }}
+                variant="destructive"
+                className="flex-1"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="mr-2 size-4" />
+                    Delete Order
+                  </>
+                )}
+              </Button>
+            )}
+
             <DrawerClose asChild>
-              <Button variant="outline" type="button">
+              <Button variant="outline" type="button" className="flex-1">
                 Cancel
               </Button>
             </DrawerClose>

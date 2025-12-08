@@ -124,11 +124,12 @@ class TestCreateMeal:
         assert meal.id is not None
         assert meal.user_id == test_user.id
         assert meal.meal_type == MealType.LUNCH.value
-        # Test nutritional totals calculation
-        assert meal.total_calories == 280 + 216 + 55
-        assert float(meal.total_protein_g) == 53.0 + 5.0 + 3.7
-        assert float(meal.total_carbs_g) == 0.0 + 45.0 + 11.0
-        assert float(meal.total_fat_g) == 6.0 + 1.8 + 0.6
+        # Test nutritional totals calculation (with portion size multipliers)
+        # Chicken: 280 * 6 = 1680, Rice: 216 * 1 = 216, Broccoli: 55 * 1 = 55, Total = 1951
+        assert meal.total_calories == (280 * 6) + (216 * 1) + (55 * 1)
+        assert float(meal.total_protein_g) == (53.0 * 6) + (5.0 * 1) + (3.7 * 1)
+        assert float(meal.total_carbs_g) == (0.0 * 6) + (45.0 * 1) + (11.0 * 1)
+        assert float(meal.total_fat_g) == (6.0 * 6) + (1.8 * 1) + (0.6 * 1)
         assert len(meal.food_items) == 3
 
     def test_create_meal_with_partial_nutritional_info(
@@ -452,11 +453,12 @@ class TestUpdateMeal:
 
         assert updated_meal is not None
         assert len(updated_meal.food_items) == 2
-        # Check recalculated totals
-        assert updated_meal.total_calories == 150 + 187
-        assert updated_meal.total_protein_g == 8.0 + 35.0
-        assert updated_meal.total_carbs_g == 15.0 + 0.0
-        assert updated_meal.total_fat_g == 9.0 + 4.0
+        # Check recalculated totals (with portion size multipliers)
+        # Salad: 150 * 2 = 300, Chicken: 187 * 4 = 748, Total = 1048
+        assert updated_meal.total_calories == (150 * 2) + (187 * 4)
+        assert updated_meal.total_protein_g == (8.0 * 2) + (35.0 * 4)
+        assert updated_meal.total_carbs_g == (15.0 * 2) + (0.0 * 4)
+        assert updated_meal.total_fat_g == (9.0 * 2) + (4.0 * 4)
 
     def test_update_nonexistent_meal(self, db: Session, test_user: UserDB):
         """Test updating a non-existent meal returns None."""

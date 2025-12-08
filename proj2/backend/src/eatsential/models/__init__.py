@@ -1,5 +1,6 @@
 """SQLAlchemy ORM models for database tables."""
 
+from .chat import ChatMessage, ChatSession
 from .models import (
     AccountStatus,
     ActivityLevel,
@@ -7,6 +8,7 @@ from .models import (
     AllergySeverity,
     AuditAction,
     DietaryPreferenceDB,
+    FeedbackType,
     GoalDB,
     HealthProfileDB,
     MealDB,
@@ -14,6 +16,7 @@ from .models import (
     MenuItem,
     MoodLogDB,
     PreferenceType,
+    RecommendationFeedbackDB,
     Restaurant,
     SleepLogDB,
     StressLogDB,
@@ -30,7 +33,10 @@ __all__ = [
     "AllergenDB",
     "AllergySeverity",
     "AuditAction",
+    "ChatMessage",
+    "ChatSession",
     "DietaryPreferenceDB",
+    "FeedbackType",
     "GoalDB",
     "HealthProfileDB",
     "MealDB",
@@ -38,6 +44,7 @@ __all__ = [
     "MenuItem",
     "MoodLogDB",
     "PreferenceType",
+    "RecommendationFeedbackDB",
     "Restaurant",
     "SleepLogDB",
     "StressLogDB",

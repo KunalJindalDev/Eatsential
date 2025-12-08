@@ -4,10 +4,16 @@
     "address": "123 Main St, Downtown",
     "cuisine": "Healthy",
     "menu_items": [
-      {"name": "Quinoa Power Bowl", "description": "Quinoa with roasted vegetables", "calories": 420.5, "price": 12.99},
-      {"name": "Grilled Tofu Salad", "description": "Fresh greens with marinated tofu", "calories": 350.0, "price": 11.50},
-      {"name": "Kale & Berry Smoothie", "description": "Nutrient-packed smoothie", "calories": 280.0, "price": 6.99},
-      {"name": "Avocado Toast", "description": "Whole grain toast with avocado", "calories": 320.0, "price": 9.99}
+      {"name": "Quinoa Power Bowl", "description": "Quinoa with roasted vegetables", "calories": 420.5, "price": 12.99, "allergens": []},
+      {"name": "Grilled Tofu Salad", "description": "Fresh greens with marinated tofu", "calories": 350.0, "price": 11.50, "allergens": ["soybeans"]},
+      {"name": "Kale & Berry Smoothie", "description": "Nutrient-packed smoothie", "calories": 280.0, "price": 6.99, "allergens": []},
+      {"name": "Avocado Toast", "description": "Whole grain toast with avocado", "calories": 320.0, "price": 9.99, "allergens": ["wheat", "gluten"]},
+      {"name": "Spinach & Chickpea Salad", "description": "Mixed greens with roasted chickpeas", "calories": 310.0, "price": 8.99, "allergens": ["sesame"]},
+      {"name": "Chia Seed Pudding", "description": "Vanilla chia pudding with berries", "calories": 260.0, "price": 7.50, "allergens": []},
+      {"name": "Lentil Curry", "description": "Spiced lentils with coconut milk", "calories": 390.0, "price": 10.99, "allergens": []},
+      {"name": "Green Smoothie", "description": "Spinach, banana, and almond milk", "calories": 240.0, "price": 6.99, "allergens": ["almonds"]},
+      {"name": "Sweet Potato Fries", "description": "Crispy sweet potato fries", "calories": 320.0, "price": 5.99, "allergens": []},
+      {"name": "Grilled Veggie Wrap", "description": "Mixed vegetables in whole grain wrap", "calories": 380.0, "price": 9.50, "allergens": ["wheat", "gluten"]}
     ]
   },
   {
@@ -15,10 +21,15 @@
     "address": "456 Oak Ave, Midtown",
     "cuisine": "Japanese",
     "menu_items": [
-      {"name": "Salmon Nigiri Set", "description": "Fresh salmon sushi", "calories": 320.0, "price": 15.99},
-      {"name": "Vegetable Roll", "description": "Cucumber, avocado, carrot", "calories": 250.0, "price": 8.99},
-      {"name": "Miso Soup", "description": "Traditional miso soup", "calories": 80.0, "price": 3.50},
-      {"name": "California Roll", "description": "Crab, avocado, cucumber", "calories": 290.0, "price": 10.99}
+      {"name": "Salmon Nigiri Set", "description": "Fresh salmon sushi", "calories": 320.0, "price": 15.99, "allergens": ["salmon", "fish", "sesame"]},
+      {"name": "Vegetable Roll", "description": "Cucumber, avocado, carrot", "calories": 250.0, "price": 8.99, "allergens": ["sesame"]},
+      {"name": "Miso Soup", "description": "Traditional miso soup", "calories": 80.0, "price": 3.50, "allergens": ["soybeans"]},
+      {"name": "California Roll", "description": "Crab, avocado, cucumber", "calories": 290.0, "price": 10.99, "allergens": ["shellfish", "sesame", "crab"]},
+      {"name": "Tuna Sashimi", "description": "Fresh tuna slices", "calories": 280.0, "price": 12.99, "allergens": ["tuna", "fish"]},
+      {"name": "Tempura Udon", "description": "Fried udon noodles with tempura", "calories": 420.0, "price": 11.99, "allergens": ["wheat", "gluten", "soybeans", "eggs"]},
+      {"name": "Edamame", "description": "Steamed green beans", "calories": 120.0, "price": 4.50, "allergens": ["soybeans"]},
+      {"name": "Miso Ramen", "description": "Broth ramen with vegetables", "calories": 350.0, "price": 9.99, "allergens": ["soybeans"]},
+      {"name": "Sushi Rice", "description": "Seasoned sushi rice", "calories": 150.0, "price": 3.00, "allergens": []}
     ]
   },
   {
@@ -26,10 +37,16 @@
     "address": "789 Elm St, Uptown",
     "cuisine": "Mediterranean",
     "menu_items": [
-      {"name": "Falafel Wrap", "description": "Chickpea falafel in pita", "calories": 480.0, "price": 11.99},
-      {"name": "Greek Salad", "description": "Fresh vegetables with feta", "calories": 220.0, "price": 9.50},
-      {"name": "Hummus Platter", "description": "Homemade hummus with pita", "calories": 350.0, "price": 8.99},
-      {"name": "Grilled Lamb Kebab", "description": "Seasoned lamb skewers", "calories": 520.0, "price": 16.99}
+      {"name": "Falafel Wrap", "description": "Chickpea falafel in pita", "calories": 480.0, "price": 11.99, "allergens": ["sesame", "wheat", "gluten"]},
+      {"name": "Greek Salad", "description": "Fresh vegetables with feta", "calories": 220.0, "price": 9.50, "allergens": ["milk"]},
+      {"name": "Hummus Platter", "description": "Homemade hummus with pita", "calories": 350.0, "price": 8.99, "allergens": ["sesame", "wheat", "gluten"]},
+      {"name": "Grilled Lamb Kebab", "description": "Seasoned lamb skewers", "calories": 520.0, "price": 16.99, "allergens": []},
+      {"name": "Eggplant Parmesan", "description": "Baked eggplant with tomato sauce", "calories": 450.0, "price": 10.99, "allergens": ["milk", "wheat", "gluten"]},
+      {"name": "Couscous Salad", "description": "Couscous with roasted vegetables", "calories": 320.0, "price": 8.50, "allergens": ["wheat", "gluten"]},
+      {"name": "Grilled Octopus", "description": "Grilled octopus with lemon", "calories": 380.0, "price": 12.99, "allergens": ["shellfish"]},
+      {"name": "Mediterranean Rice Pilaf", "description": "Rice with herbs and vegetables", "calories": 310.0, "price": 7.99, "allergens": ["wheat", "gluten"]},
+      {"name": "Grilled Eggplant", "description": "Charred eggplant with tahini", "calories": 280.0, "price": 6.50, "allergens": ["sesame"]},
+      {"name": "Tzatziki", "description": "Greek yogurt dip with cucumber", "calories": 150.0, "price": 4.00, "allergens": ["milk"]}
     ]
   },
   {
@@ -37,10 +54,16 @@
     "address": "321 Maple Dr, Eastside",
     "cuisine": "Indian",
     "menu_items": [
-      {"name": "Chicken Tikka Masala", "description": "Creamy tomato curry", "calories": 550.0, "price": 14.99},
-      {"name": "Vegetable Biryani", "description": "Aromatic rice with vegetables", "calories": 420.0, "price": 12.50},
-      {"name": "Palak Paneer", "description": "Spinach with cottage cheese", "calories": 380.0, "price": 13.50},
-      {"name": "Samosa (3 pcs)", "description": "Crispy potato pastries", "calories": 310.0, "price": 6.99}
+      {"name": "Chicken Tikka Masala", "description": "Creamy tomato curry", "calories": 550.0, "price": 14.99, "allergens": ["milk"]},
+      {"name": "Vegetable Biryani", "description": "Aromatic rice with vegetables", "calories": 420.0, "price": 12.50, "allergens": []},
+      {"name": "Palak Paneer", "description": "Spinach with cottage cheese", "calories": 380.0, "price": 13.50, "allergens": ["milk", "lactose"]},
+      {"name": "Samosa (3 pcs)", "description": "Crispy potato pastries", "calories": 310.0, "price": 6.99, "allergens": ["wheat", "gluten"]},
+      {"name": "Butter Chicken", "description": "Creamy tomato-based curry", "calories": 580.0, "price": 15.99, "allergens": ["milk"]},
+      {"name": "Chole Bhature", "description": "Spiced chickpeas with deep-fried bread", "calories": 620.0, "price": 13.50, "allergens": ["wheat", "gluten", "milk"]},
+      {"name": "Aloo Gobi", "description": "Spiced potatoes and cauliflower", "calories": 350.0, "price": 9.99, "allergens": ["wheat", "gluten"]},
+      {"name": "Paneer Tikka", "description": "Grilled paneer with spices", "calories": 420.0, "price": 11.50, "allergens": ["milk", "wheat", "gluten"]},
+      {"name": "Samosa Curry", "description": "Spiced samosas with tomato sauce", "calories": 480.0, "price": 10.99, "allergens": ["wheat", "gluten"]},
+      {"name": "Naan", "description": "Leavened flatbread", "calories": 200.0, "price": 3.50, "allergens": ["wheat", "gluten", "milk"]}
     ]
   },
   {
@@ -48,10 +71,16 @@
     "address": "654 Pine St, Westside",
     "cuisine": "Mexican",
     "menu_items": [
-      {"name": "Fish Tacos", "description": "Grilled fish with salsa", "calories": 380.0, "price": 13.99},
-      {"name": "Veggie Burrito", "description": "Black beans, rice, vegetables", "calories": 520.0, "price": 11.99},
-      {"name": "Guacamole & Chips", "description": "Fresh avocado dip", "calories": 290.0, "price": 7.99},
-      {"name": "Chicken Quesadilla", "description": "Grilled chicken & cheese", "calories": 580.0, "price": 12.50}
+      {"name": "Fish Tacos", "description": "Grilled cod with salsa", "calories": 380.0, "price": 13.99, "allergens": ["cod", "fish", "wheat", "gluten"]},
+      {"name": "Veggie Burrito", "description": "Black beans, rice, vegetables", "calories": 520.0, "price": 11.99, "allergens": ["wheat", "gluten"]},
+      {"name": "Guacamole & Chips", "description": "Fresh avocado dip", "calories": 290.0, "price": 7.99, "allergens": []},
+      {"name": "Chicken Quesadilla", "description": "Grilled chicken & cheese", "calories": 580.0, "price": 12.50, "allergens": ["wheat", "gluten", "milk", "lactose"]},
+      {"name": "Carnitas Tacos", "description": "Slow-cooked pork with citrus", "calories": 450.0, "price": 10.99, "allergens": ["wheat", "gluten"]},
+      {"name": "Chicken Tinga", "description": "Spicy shredded chicken", "calories": 420.0, "price": 11.50, "allergens": ["wheat", "gluten", "milk"]},
+      {"name": "Street Corn", "description": "Grilled corn with chili-lime", "calories": 250.0, "price": 6.50, "allergens": ["corn"]},
+      {"name": "Enchiladas", "description": "Corn tortillas with tomato sauce", "calories": 480.0, "price": 12.99, "allergens": ["corn", "milk"]},
+      {"name": "Tamales", "description": "Steamed corn dough with filling", "calories": 320.0, "price": 8.50, "allergens": ["corn"]},
+      {"name": "Churros", "description": "Crispy fried dough with cinnamon", "calories": 350.0, "price": 6.99, "allergens": ["wheat", "gluten", "eggs"]}
     ]
   },
   {
@@ -59,10 +88,16 @@
     "address": "987 Cedar Ln, North End",
     "cuisine": "Italian",
     "menu_items": [
-      {"name": "Spaghetti Carbonara", "description": "Creamy bacon pasta", "calories": 680.0, "price": 15.99},
-      {"name": "Margherita Pizza", "description": "Fresh mozzarella & basil", "calories": 720.0, "price": 14.50},
-      {"name": "Caesar Salad", "description": "Romaine with parmesan", "calories": 250.0, "price": 8.99},
-      {"name": "Penne Arrabbiata", "description": "Spicy tomato sauce", "calories": 450.0, "price": 13.50}
+      {"name": "Spaghetti Carbonara", "description": "Creamy bacon pasta", "calories": 680.0, "price": 15.99, "allergens": ["wheat", "gluten", "milk", "lactose", "eggs"]},
+      {"name": "Margherita Pizza", "description": "Fresh mozzarella & basil", "calories": 720.0, "price": 14.50, "allergens": ["wheat", "gluten", "milk", "lactose"]},
+      {"name": "Caesar Salad", "description": "Romaine with parmesan", "calories": 250.0, "price": 8.99, "allergens": ["milk", "eggs"]},
+      {"name": "Penne Arrabbiata", "description": "Spicy tomato sauce", "calories": 450.0, "price": 13.50, "allergens": ["wheat", "gluten"]},
+      {"name": "Rigatoni with Meatballs", "description": "Tomato sauce with beef meatballs", "calories": 620.0, "price": 14.99, "allergens": ["wheat", "gluten", "milk"]},
+      {"name": "Lasagna", "description": "Layered pasta with meat sauce", "calories": 750.0, "price": 16.99, "allergens": ["wheat", "gluten", "milk"]},
+      {"name": "Eggplant Parmesan", "description": "Baked eggplant with tomato sauce", "calories": 450.0, "price": 11.50, "allergens": ["wheat", "gluten", "milk"]},
+      {"name": "Chicken Parmesan", "description": "Breaded chicken with mozzarella", "calories": 680.0, "price": 15.99, "allergens": ["wheat", "gluten", "milk", "lactose"]},
+      {"name": "Bruschetta", "description": "Toast with fresh tomato topping", "calories": 200.0, "price": 6.50, "allergens": ["wheat", "gluten"]},
+      {"name": "Minestrone Soup", "description": "Vegetable soup with beans", "calories": 280.0, "price": 7.99, "allergens": ["wheat", "gluten"]}
     ]
   },
   {
@@ -70,10 +105,16 @@
     "address": "147 Bamboo St, Chinatown",
     "cuisine": "Chinese",
     "menu_items": [
-      {"name": "Kung Pao Chicken", "description": "Spicy stir-fried chicken", "calories": 520.0, "price": 13.99},
-      {"name": "Vegetable Fried Rice", "description": "Wok-fried rice with veggies", "calories": 380.0, "price": 9.99},
-      {"name": "Spring Rolls (4 pcs)", "description": "Crispy vegetable rolls", "calories": 240.0, "price": 6.50},
-      {"name": "Sweet & Sour Pork", "description": "Crispy pork in tangy sauce", "calories": 610.0, "price": 14.50}
+      {"name": "Kung Pao Chicken", "description": "Spicy stir-fried chicken", "calories": 520.0, "price": 13.99, "allergens": ["peanuts", "soybeans"]},
+      {"name": "Vegetable Fried Rice", "description": "Wok-fried rice with veggies", "calories": 380.0, "price": 9.99, "allergens": ["soybeans", "sesame"]},
+      {"name": "Spring Rolls (4 pcs)", "description": "Crispy vegetable rolls", "calories": 240.0, "price": 6.50, "allergens": ["wheat", "gluten"]},
+      {"name": "Sweet & Sour Pork", "description": "Crispy pork in tangy sauce", "calories": 610.0, "price": 14.50, "allergens": ["soybeans", "eggs"]},
+      {"name": "Mapo Tofu", "description": "Spicy tofu in fermented bean paste", "calories": 480.0, "price": 11.99, "allergens": ["soybeans"]},
+      {"name": "Hot and Sour Soup", "description": "Spicy broth with tofu", "calories": 220.0, "price": 6.50, "allergens": ["soybeans", "eggs"]},
+      {"name": "Moo Shu Pork", "description": "Pork with pancakes", "calories": 520.0, "price": 12.99, "allergens": ["soybeans", "wheat", "gluten"]},
+      {"name": "Dim Sum", "description": "Steamed buns with fillings", "calories": 280.0, "price": 8.50, "allergens": ["wheat", "gluten"]},
+      {"name": "Peking Duck", "description": "Roasted duck with pancakes", "calories": 650.0, "price": 16.99, "allergens": ["wheat", "gluten"]},
+      {"name": "Egg Drop Soup", "description": "Clear broth with egg", "calories": 150.0, "price": 4.50, "allergens": ["eggs", "soybeans"]}
     ]
   },
   {
@@ -81,10 +122,16 @@
     "address": "258 Grill Ave, South Park",
     "cuisine": "American",
     "menu_items": [
-      {"name": "Classic Cheeseburger", "description": "Beef patty with cheese", "calories": 720.0, "price": 12.99},
-      {"name": "Veggie Burger", "description": "Plant-based patty", "calories": 480.0, "price": 11.99},
-      {"name": "Sweet Potato Fries", "description": "Crispy sweet potato fries", "calories": 320.0, "price": 5.99},
-      {"name": "BBQ Chicken Sandwich", "description": "Grilled chicken with BBQ sauce", "calories": 560.0, "price": 13.50}
+      {"name": "Classic Cheeseburger", "description": "Beef patty with cheese", "calories": 720.0, "price": 12.99, "allergens": ["wheat", "gluten", "milk", "lactose"]},
+      {"name": "Veggie Burger", "description": "Plant-based patty", "calories": 480.0, "price": 11.99, "allergens": ["wheat", "gluten", "soybeans"]},
+      {"name": "Sweet Potato Fries", "description": "Crispy sweet potato fries", "calories": 320.0, "price": 5.99, "allergens": []},
+      {"name": "BBQ Chicken Sandwich", "description": "Grilled chicken with BBQ sauce", "calories": 560.0, "price": 13.50, "allergens": ["wheat", "gluten"]},
+      {"name": "BBQ Pulled Pork", "description": "Slow-cooked pork with sauce", "calories": 620.0, "price": 14.99, "allergens": ["wheat", "gluten"]},
+      {"name": "Onion Rings", "description": "Crispy fried onions", "calories": 350.0, "price": 6.50, "allergens": ["wheat", "gluten", "eggs"]},
+      {"name": "Apple Pie", "description": "Classic cinnamon pie", "calories": 420.0, "price": 7.99, "allergens": ["wheat", "gluten", "milk", "eggs"]},
+      {"name": "Macaroni Salad", "description": "Macaroni with dressing", "calories": 380.0, "price": 6.99, "allergens": ["wheat", "gluten", "eggs"]},
+      {"name": "Chicken Nuggets", "description": "Crispy chicken bites", "calories": 450.0, "price": 8.50, "allergens": ["wheat", "gluten", "milk"]},
+      {"name": "Grilled Cheese", "description": "Cheese on toasted bread", "calories": 320.0, "price": 6.50, "allergens": ["wheat", "gluten", "milk", "lactose"]}
     ]
   },
   {
@@ -92,10 +139,16 @@
     "address": "369 Lotus Blvd, Gateway",
     "cuisine": "Thai",
     "menu_items": [
-      {"name": "Pad Thai", "description": "Stir-fried rice noodles", "calories": 520.0, "price": 13.99},
-      {"name": "Green Curry", "description": "Coconut curry with vegetables", "calories": 450.0, "price": 12.99},
-      {"name": "Tom Yum Soup", "description": "Spicy & sour soup", "calories": 180.0, "price": 7.99},
-      {"name": "Mango Sticky Rice", "description": "Sweet coconut rice dessert", "calories": 380.0, "price": 6.99}
+      {"name": "Pad Thai", "description": "Stir-fried rice noodles", "calories": 520.0, "price": 13.99, "allergens": ["peanuts", "shrimp", "shellfish", "soybeans", "eggs"]},
+      {"name": "Green Curry", "description": "Coconut curry with vegetables", "calories": 450.0, "price": 12.99, "allergens": []},
+      {"name": "Tom Yum Soup", "description": "Spicy & sour soup", "calories": 180.0, "price": 7.99, "allergens": ["shrimp", "shellfish"]},
+      {"name": "Mango Sticky Rice", "description": "Sweet coconut rice dessert", "calories": 380.0, "price": 6.99, "allergens": []},
+      {"name": "Tom Yum Goong", "description": "Spicy shrimp soup", "calories": 220.0, "price": 8.99, "allergens": ["shrimp", "shellfish"]},
+      {"name": "Massaman Curry", "description": "Spiced beef with potatoes", "calories": 480.0, "price": 13.50, "allergens": ["soybeans"]},
+      {"name": "Khao Soi", "description": "Coconut noodle soup", "calories": 350.0, "price": 10.99, "allergens": ["soybeans"]},
+      {"name": "Som Tum", "description": "Green papaya salad", "calories": 280.0, "price": 7.50, "allergens": ["soybeans"]},
+      {"name": "Thai Basil Pork", "description": "Pork with Thai basil", "calories": 420.0, "price": 11.99, "allergens": ["soybeans"]},
+      {"name": "Thai Iced Tea", "description": "Sweetened black tea", "calories": 150.0, "price": 4.50, "allergens": ["soybeans"]}
     ]
   },
   {
@@ -103,10 +156,16 @@
     "address": "741 Baguette St, French Quarter",
     "cuisine": "French",
     "menu_items": [
-      {"name": "Croissant Sandwich", "description": "Ham & cheese croissant", "calories": 420.0, "price": 9.99},
-      {"name": "Quiche Lorraine", "description": "Bacon & cheese quiche", "calories": 480.0, "price": 11.50},
-      {"name": "French Onion Soup", "description": "Classic onion soup", "calories": 320.0, "price": 8.99},
-      {"name": "Crème Brûlée", "description": "Caramelized custard dessert", "calories": 290.0, "price": 7.50}
+      {"name": "Croissant Sandwich", "description": "Ham & cheese croissant", "calories": 420.0, "price": 9.99, "allergens": ["wheat", "gluten", "milk", "lactose"]},
+      {"name": "Quiche Lorraine", "description": "Bacon & cheese quiche", "calories": 480.0, "price": 11.50, "allergens": ["wheat", "gluten", "milk", "lactose", "eggs"]},
+      {"name": "French Onion Soup", "description": "Classic onion soup", "calories": 320.0, "price": 8.99, "allergens": ["wheat", "gluten"]},
+      {"name": "Crème Brûlée", "description": "Caramelized custard dessert", "calories": 290.0, "price": 7.50, "allergens": ["milk", "lactose", "eggs"]},
+      {"name": "Beef Stroganoff", "description": "Beef with sour cream", "calories": 520.0, "price": 13.99, "allergens": ["wheat", "gluten", "milk"]},
+      {"name": "Coq au Vin", "description": "Chicken with red wine", "calories": 580.0, "price": 14.99, "allergens": ["wheat", "gluten", "milk"]},
+      {"name": "Croque Monsieur", "description": "Grilled ham & cheese sandwich", "calories": 450.0, "price": 10.99, "allergens": ["wheat", "gluten", "milk", "lactose"]},
+      {"name": "Chocolate Mousse", "description": "Rich chocolate dessert", "calories": 320.0, "price": 7.50, "allergens": ["milk", "lactose", "eggs"]},
+      {"name": "Sole Meunière", "description": "Pan-seared sole with butter", "calories": 480.0, "price": 15.99, "allergens": ["fish"]},
+      {"name": "Chocolate Macaroon", "description": "Almond-flavored cookie", "calories": 200.0, "price": 5.50, "allergens": ["eggs", "almonds"]}
     ]
   },
   {
@@ -114,10 +173,16 @@
     "address": "852 Kimchi Way, Korea Town",
     "cuisine": "Korean",
     "menu_items": [
-      {"name": "Bibimbap", "description": "Mixed rice bowl with vegetables", "calories": 520.0, "price": 14.99},
-      {"name": "Korean BBQ Beef", "description": "Marinated grilled beef", "calories": 580.0, "price": 17.99},
-      {"name": "Kimchi Fried Rice", "description": "Spicy fermented cabbage rice", "calories": 450.0, "price": 12.50},
-      {"name": "Japchae", "description": "Sweet potato noodles", "calories": 380.0, "price": 11.99}
+      {"name": "Bibimbap", "description": "Mixed rice bowl with vegetables", "calories": 520.0, "price": 14.99, "allergens": ["soybeans", "sesame", "eggs"]},
+      {"name": "Korean BBQ Beef", "description": "Marinated grilled beef", "calories": 580.0, "price": 17.99, "allergens": ["soybeans", "sesame"]},
+      {"name": "Kimchi Fried Rice", "description": "Spicy fermented cabbage rice", "calories": 450.0, "price": 12.50, "allergens": ["soybeans", "eggs"]},
+      {"name": "Japchae", "description": "Sweet potato noodles", "calories": 380.0, "price": 11.99, "allergens": ["soybeans"]},
+      {"name": "Kimchi Stew", "description": "Spicy kimchi soup", "calories": 320.0, "price": 9.50, "allergens": ["soybeans"]},
+      {"name": "Samgyeopsal", "description": "Grilled pork belly", "calories": 620.0, "price": 15.99, "allergens": ["soybeans", "sesame"]},
+      {"name": "Kimchi Pancake", "description": "Kimchi-filled pancake", "calories": 480.0, "price": 12.50, "allergens": ["soybeans", "eggs"]},
+      {"name": "Tteokbokki", "description": "Spicy rice cakes", "calories": 350.0, "price": 8.99, "allergens": ["soybeans"]},
+      {"name": "Gimbap", "description": "Seaweed rice rolls", "calories": 280.0, "price": 6.50, "allergens": ["soybeans"]},
+      {"name": "Korean Fried Chicken", "description": "Crispy chicken with gochujang", "calories": 580.0, "price": 14.99, "allergens": ["soybeans", "sesame"]}
     ]
   },
   {
@@ -125,10 +190,16 @@
     "address": "963 Ocean Dr, Beach District",
     "cuisine": "Hawaiian",
     "menu_items": [
-      {"name": "Ahi Tuna Poke Bowl", "description": "Fresh tuna with rice", "calories": 420.0, "price": 15.99},
-      {"name": "Salmon Poke Bowl", "description": "Fresh salmon with edamame", "calories": 450.0, "price": 14.99},
-      {"name": "Spam Musubi", "description": "Rice & spam wrapped in seaweed", "calories": 290.0, "price": 6.50},
-      {"name": "Hawaiian BBQ Chicken", "description": "Teriyaki glazed chicken", "calories": 520.0, "price": 13.99}
+      {"name": "Ahi Tuna Poke Bowl", "description": "Fresh tuna with rice", "calories": 420.0, "price": 15.99, "allergens": ["tuna", "fish", "sesame", "soybeans"]},
+      {"name": "Salmon Poke Bowl", "description": "Fresh salmon with edamame", "calories": 450.0, "price": 14.99, "allergens": ["salmon", "fish", "soybeans"]},
+      {"name": "Spam Musubi", "description": "Rice & spam wrapped in seaweed", "calories": 290.0, "price": 6.50, "allergens": ["soybeans"]},
+      {"name": "Hawaiian BBQ Chicken", "description": "Teriyaki glazed chicken", "calories": 520.0, "price": 13.99, "allergens": ["soybeans"]},
+      {"name": "Kalua Pig", "description": "Slow-roasted pork", "calories": 620.0, "price": 16.99, "allergens": ["soybeans"]},
+      {"name": "Pineapple Fried Rice", "description": "Fried rice with pineapple", "calories": 420.0, "price": 10.99, "allergens": ["soybeans"]},
+      {"name": "Shrimp Tempura", "description": "Fried shrimp with tempura", "calories": 480.0, "price": 12.50, "allergens": ["soybeans", "shrimp", "shellfish", "wheat", "gluten", "eggs"]},
+      {"name": "Loco Moco", "description": "Rice with meat and gravy", "calories": 580.0, "price": 13.99, "allergens": ["soybeans", "wheat", "gluten"]},
+      {"name": "Hawaiian Chicken", "description": "Grilled chicken with teriyaki", "calories": 520.0, "price": 14.50, "allergens": ["soybeans"]},
+      {"name": "Pineapple Juice", "description": "Fresh pineapple drink", "calories": 120.0, "price": 4.50, "allergens": ["soybeans"]}
     ]
   },
   {
@@ -136,10 +207,16 @@
     "address": "159 Plant St, Green District",
     "cuisine": "Vegan",
     "menu_items": [
-      {"name": "Beyond Burger", "description": "Plant-based burger patty", "calories": 480.0, "price": 13.99},
-      {"name": "Buddha Bowl", "description": "Chickpeas, quinoa, vegetables", "calories": 420.0, "price": 12.50},
-      {"name": "Acai Bowl", "description": "Acai berries with granola", "calories": 320.0, "price": 9.99},
-      {"name": "Jackfruit Tacos", "description": "Pulled jackfruit tacos", "calories": 380.0, "price": 11.99}
+      {"name": "Beyond Burger", "description": "Plant-based burger patty", "calories": 480.0, "price": 13.99, "allergens": ["wheat", "gluten", "soybeans"]},
+      {"name": "Buddha Bowl", "description": "Chickpeas, quinoa, vegetables", "calories": 420.0, "price": 12.50, "allergens": ["sesame"]},
+      {"name": "Acai Bowl", "description": "Acai berries with granola", "calories": 320.0, "price": 9.99, "allergens": []},
+      {"name": "Jackfruit Tacos", "description": "Pulled jackfruit tacos", "calories": 380.0, "price": 11.99, "allergens": ["wheat", "gluten"]},
+      {"name": "Lentil Curry", "description": "Spiced lentils with coconut milk", "calories": 390.0, "price": 10.99, "allergens": ["soybeans"]},
+      {"name": "Tofu Stir-Fry", "description": "Stir-fried tofu with veggies", "calories": 420.0, "price": 11.50, "allergens": ["soybeans"]},
+      {"name": "Sweet Potato Fries", "description": "Crispy sweet potato fries", "calories": 320.0, "price": 5.99, "allergens": []},
+      {"name": "Quinoa Salad", "description": "Quinoa with roasted vegetables", "calories": 350.0, "price": 8.99, "allergens": ["sesame"]},
+      {"name": "Chickpea Curry", "description": "Spiced chickpeas with veggies", "calories": 420.0, "price": 10.99, "allergens": ["soybeans"]},
+      {"name": "Chocolate Avocado Mousse", "description": "Rich chocolate dessert", "calories": 320.0, "price": 7.50, "allergens": ["soybeans"]}
     ]
   },
   {
@@ -147,10 +224,16 @@
     "address": "357 Ribeye Rd, Business District",
     "cuisine": "Steakhouse",
     "menu_items": [
-      {"name": "Ribeye Steak", "description": "12oz premium ribeye", "calories": 780.0, "price": 29.99},
-      {"name": "Filet Mignon", "description": "8oz tender filet", "calories": 520.0, "price": 34.99},
-      {"name": "Grilled Salmon", "description": "Fresh Atlantic salmon", "calories": 480.0, "price": 24.99},
-      {"name": "Baked Potato", "description": "Loaded baked potato", "calories": 320.0, "price": 6.99}
+      {"name": "Ribeye Steak", "description": "12oz premium ribeye", "calories": 780.0, "price": 29.99, "allergens": []},
+      {"name": "Filet Mignon", "description": "8oz tender filet", "calories": 520.0, "price": 34.99, "allergens": []},
+      {"name": "Grilled Salmon", "description": "Fresh Atlantic salmon", "calories": 480.0, "price": 24.99, "allergens": ["salmon", "fish"]},
+      {"name": "Baked Potato", "description": "Loaded baked potato", "calories": 320.0, "price": 6.99, "allergens": ["milk"]},
+      {"name": "Beef Wellington", "description": "Beef with mushroom duxelles", "calories": 820.0, "price": 32.99, "allergens": ["milk", "wheat", "gluten", "eggs"]},
+      {"name": "Lobster Thermidor", "description": "Lobster with brandy sauce", "calories": 750.0, "price": 35.99, "allergens": ["shellfish", "lobster", "eggs"]},
+      {"name": "Lobster Roll", "description": "Lobster in brioche bun", "calories": 680.0, "price": 28.99, "allergens": ["shellfish", "lobster", "wheat", "gluten"]},
+      {"name": "Grilled Octopus", "description": "Charred octopus with lemon", "calories": 420.0, "price": 22.99, "allergens": ["shellfish"]},
+      {"name": "Baked Alaska", "description": "Vanilla sponge with meringue", "calories": 450.0, "price": 18.99, "allergens": ["eggs", "milk", "lactose"]},
+      {"name": "Lobster Bisque", "description": "Creamy lobster soup", "calories": 320.0, "price": 15.99, "allergens": ["shellfish", "lobster", "milk", "lactose"]}
     ]
   },
   {
@@ -158,9 +241,20 @@
     "address": "753 Morning Ave, Sunrise Heights",
     "cuisine": "Breakfast",
     "menu_items": [
-      {"name": "Pancake Stack", "description": "Fluffy buttermilk pancakes", "calories": 620.0, "price": 9.99},
-      {"name": "Eggs Benedict", "description": "Poached eggs on English muffin", "calories": 520.0, "price": 12.99},
-      {"name": "Avocado Toast Deluxe", "description": "Avocado with poached egg", "calories": 420.0, "price": 11.50},
+      {"name": "Pancake Stack", "description": "Fluffy buttermilk pancakes", "calories": 620.0, "price": 9.99, "allergens": ["wheat", "gluten", "milk", "lactose", "eggs"]},
+      {"name": "Eggs Benedict", "description": "Poached eggs on English muffin", "calories": 520.0, "price": 12.99, "allergens": ["wheat", "gluten", "milk", "eggs"]},
+      {"name": "Avocado Toast Deluxe", "description": "Avocado with poached egg", "calories": 420.0, "price": 11.50, "allergens": ["wheat", "gluten", "eggs"]},
+      {"name": "French Toast", "description": "Classic cinnamon French toast", "calories": 580.0, "price": 10.99, "allergens": ["wheat", "gluten", "eggs"]},
+      {"name": "Omelette", "description": "Scrambled eggs with veggies", "calories": 450.0, "price": 8.99, "allergens": ["eggs"]},
+      {"name": "Waffles", "description": "Crispy Belgian waffles", "calories": 420.0, "price": 9.50, "allergens": ["wheat", "gluten", "eggs"]},
+      {"name": "Breakfast Burrito", "description": "Scrambled eggs, beans, and veggies", "calories": 580.0, "price": 11.99, "allergens": ["wheat", "gluten"]},
+      {"name": "Scrambled Eggs", "description": "Simple scrambled eggs", "calories": 320.0, "price": 6.50, "allergens": ["eggs"]},
+      {"name": "Breakfast Sandwich", "description": "Bacon, egg, and cheese", "calories": 520.0, "price": 10.99, "allergens": ["wheat", "gluten", "milk", "lactose", "eggs"]},
+      {"name": "Cappuccino", "description": "Espresso with steamed milk", "calories": 120.0, "price": 4.50, "allergens": ["milk", "lactose"]}
+    ]
+  }
+]
+"calories": 420.0, "price": 11.50},
       {"name": "French Toast", "description": "Classic cinnamon French toast", "calories": 580.0, "price": 10.99}
     ]
   }

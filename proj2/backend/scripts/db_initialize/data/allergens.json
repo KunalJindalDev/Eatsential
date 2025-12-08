@@ -192,12 +192,6 @@
     "description": "Corn/maize and corn-derived products"
   },
   {
-    "name": "soy",
-    "category": "legume",
-    "is_major_allergen": false,
-    "description": "Soy products (alternative name for soybeans)"
-  },
-  {
     "name": "mustard",
     "category": "seed",
     "is_major_allergen": false,

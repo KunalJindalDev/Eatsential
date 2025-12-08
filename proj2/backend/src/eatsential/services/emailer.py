@@ -65,3 +65,5 @@ async def send_verification_email(email: str, token: str) -> bool:
     except Exception as e:
         print(f"Failed to send email: {e!s}")
         return False
+        ##print(f"📧 Verification email for {email}: {verification_url}")
+        ##return True  # Return True anyway so user can proceed in development
