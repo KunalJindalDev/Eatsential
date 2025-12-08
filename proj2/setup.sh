@@ -143,6 +143,30 @@ fi
 
 echo ""
 
+# Step 4a: Configure frontend environment with Google Maps API key
+print_info "Configuring frontend environment..."
+cd "$PROJECT_ROOT/frontend"
+
+# Extract Google Maps API key from backend .env
+if [ -f "$PROJECT_ROOT/backend/.env" ]; then
+    GOOGLE_MAPS_API_KEY=$(grep "^GOOGLE_MAPS_API_KEY=" "$PROJECT_ROOT/backend/.env" | cut -d '=' -f 2)
+    
+    if [ -n "$GOOGLE_MAPS_API_KEY" ]; then
+        # Create or update .env.local with the API key
+        cat > .env.local << EOF
+# Google Maps API Key for frontend embeds
+VITE_GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY
+EOF
+        print_success "Frontend .env.local configured with Google Maps API key"
+    else
+        print_warning "Google Maps API key not found in backend .env, skipping frontend config"
+    fi
+else
+    print_warning "Backend .env not found, skipping frontend Google Maps configuration"
+fi
+
+echo ""
+
 # Step 5: Set up backend Python environment
 print_info "Setting up backend Python environment..."
 cd "$PROJECT_ROOT/backend"
