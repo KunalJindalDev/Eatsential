@@ -81,6 +81,10 @@ def save_restaurant_from_google_places(
         if place_data.get("formatted_address") and not existing.address:
             existing.address = place_data.get("formatted_address")
         
+        # Update website URL if available
+        if place_data.get("website") and not existing.website_url:
+            existing.website_url = place_data.get("website")
+        
         # Update cuisine if we have new information
         # Prefer provided cuisine, then extracted, and only update if we have better info
         if final_cuisine:
@@ -106,11 +110,13 @@ def save_restaurant_from_google_places(
     
     # Create new restaurant
     address = place_data.get("formatted_address")
+    website_url = place_data.get("website")
     
     restaurant = Restaurant(
         id=place_id,  # Use place_id as the primary key for uniqueness
         name=name,
         address=address,
+        website_url=website_url,
         cuisine=final_cuisine,
         is_active=True,
     )

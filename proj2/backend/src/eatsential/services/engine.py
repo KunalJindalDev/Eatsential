@@ -131,29 +131,151 @@ class RecommendationService:
         context = self._load_user_context(user)
         filters = request.filters or RecommendationFilters()
 
-        candidates = self._get_menu_item_candidates()
-        safe_candidates = self._apply_safety_filters(context, candidates)
-
+        # NEW FLOW: Query Google Places API first based on cuisines and price range
+        cuisines = filters.cuisine or []
+        price_range = filters.price_range
+        
+        # Step 1: Get restaurants from Google Places API
+        google_restaurants = []
+        if cuisines:
+            for cuisine in cuisines:
+                try:
+                    from .google_places import search_places_for_cuisine
+                    places = await search_places_for_cuisine(cuisine, max_results=10)
+                    
+                    # Filter by price range if specified
+                    if price_range:
+                        price_min, price_max = PRICE_RANGE_MAP.get(price_range, (None, None))
+                        filtered_places = []
+                        for p in places:
+                            price_level = p.get("price_level")
+                            # Skip price filter if price_level is not available
+                            if price_level is None:
+                                filtered_places.append(p)
+                                continue
+                            # Apply price filters
+                            if (price_min is None or price_level >= (price_min / 10)) and \
+                               (price_max is None or price_level <= (price_max / 10)):
+                                filtered_places.append(p)
+                        places = filtered_places
+                    
+                    google_restaurants.extend(places)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch Google Places for cuisine {cuisine}: {e}")
+        
+        if not google_restaurants:
+            # Fallback to DB-based recommendations if Google Places fails
+            candidates = self._get_menu_item_candidates()
+            safe_candidates = self._apply_safety_filters(context, candidates)
+            if not safe_candidates:
+                return RecommendationResponse(items=[])
+            baseline = self._get_baseline_meals(context, safe_candidates, filters)
+            # Ensure diverse restaurants (one item per restaurant)
+            diverse = self._ensure_diverse_restaurants(baseline)
+            return RecommendationResponse(items=diverse[: self.max_results])
+        
+        # Step 2: Deduplicate and save restaurants to DB
+        unique_places = {}
+        for place in google_restaurants:
+            place_id = place.get("place_id")
+            if place_id and place_id not in unique_places:
+                unique_places[place_id] = place
+                
+                # Save/update restaurant in DB
+                save_restaurant_from_google_places(
+                    db=self.db,
+                    place_data={
+                        "place_id": place_id,
+                        "name": place.get("name"),
+                        "formatted_address": place.get("address"),
+                        "types": place.get("types", []),
+                        "geometry": place.get("geometry", {}),
+                    }
+                )
+        
+        # Step 3: Get menu items from these restaurants (from DB)
+        place_ids = list(unique_places.keys())
+        logger.info(f"Looking for menu items from {len(place_ids)} Google Places restaurants")
+        logger.debug(f"Place IDs: {place_ids}")
+        
+        menu_items_from_google_restaurants = (
+            self.db.query(MenuItem)
+            .join(Restaurant)
+            .options(
+                selectinload(MenuItem.restaurant),
+                selectinload(MenuItem.allergens),
+            )
+            .filter(Restaurant.id.in_(place_ids))
+            .filter(Restaurant.is_active.is_(True))
+            .all()
+        )
+        
+        logger.info(f"Found {len(menu_items_from_google_restaurants)} menu items from Google Places restaurants")
+        
+        if not menu_items_from_google_restaurants:
+            # Google Places restaurants don't have menu items yet - fall back to DB restaurants
+            logger.warning("No menu items found for Google Places restaurants, falling back to database restaurants")
+            candidates = self._get_menu_item_candidates()
+            safe_candidates = self._apply_safety_filters(context, candidates)
+            if not safe_candidates:
+                return RecommendationResponse(items=[])
+            
+            if (request.mode or "llm") == "baseline":
+                baseline = self._get_baseline_meals(context, safe_candidates, filters)
+                # Ensure diverse restaurants (one item per restaurant)
+                diverse = self._ensure_diverse_restaurants(baseline)
+                return RecommendationResponse(items=diverse[: self.max_results])
+            
+            try:
+                llm = await self._get_llm_recommendations(
+                    context=context,
+                    items=safe_candidates,
+                    filters=request.filters,
+                    entity_type="meal",
+                    restaurant_menu_map=None,
+                    google_places_data=None,  # No Google data available
+                )
+                if llm:
+                    # Ensure diverse restaurants (one item per restaurant)
+                    diverse = self._ensure_diverse_restaurants(llm)
+                    return RecommendationResponse(items=diverse[: self.max_results])
+            except Exception as exc:
+                logger.exception("LLM recommendation failed, falling back to baseline: %s", exc)
+            
+            baseline = self._get_baseline_meals(context, safe_candidates, filters)
+            # Ensure diverse restaurants (one item per restaurant)
+            diverse = self._ensure_diverse_restaurants(baseline)
+            return RecommendationResponse(items=diverse[: self.max_results])
+        
+        # Step 4: Apply safety filters
+        safe_candidates = self._apply_safety_filters(context, menu_items_from_google_restaurants)
         if not safe_candidates:
             return RecommendationResponse(items=[])
 
         # Baseline fallback mode
         if (request.mode or "llm") == "baseline":
             baseline = self._get_baseline_meals(context, safe_candidates, filters)
-            return RecommendationResponse(items=baseline[: self.max_results])
+            # Ensure diverse restaurants (one item per restaurant)
+            diverse = self._ensure_diverse_restaurants(baseline)
+            # Enrich with Google Places data
+            enriched = self._enrich_with_google_data(diverse, unique_places)
+            return RecommendationResponse(items=enriched[: self.max_results])
 
         # Try LLM recommendations
         try:
             llm = await self._get_llm_recommendations(
                 context=context,
-                items=safe_candidates,          # FIXED
+                items=safe_candidates,
                 filters=request.filters,
                 entity_type="meal",
-                restaurant_menu_map=None,       # FIXED
+                restaurant_menu_map=None,
+                google_places_data=unique_places,  # Pass Google data
             )
 
             if llm:
-                return RecommendationResponse(items=llm[: self.max_results])
+                # Ensure diverse restaurants (one item per restaurant)
+                diverse = self._ensure_diverse_restaurants(llm)
+                return RecommendationResponse(items=diverse[: self.max_results])
 
         except Exception as exc:
             logger.exception(
@@ -162,9 +284,12 @@ class RecommendationService:
 
         # Fallback
         baseline = self._get_baseline_meals(context, safe_candidates, filters)
-        return RecommendationResponse(items=baseline[: self.max_results])
+        # Ensure diverse restaurants (one item per restaurant)
+        diverse = self._ensure_diverse_restaurants(baseline)
+        enriched = self._enrich_with_google_data(diverse, unique_places)
+        return RecommendationResponse(items=enriched[: self.max_results])
 
-    def get_restaurant_recommendations(
+    async def get_restaurant_recommendations(
         self,
         *,
         user: UserDB,
@@ -174,27 +299,68 @@ class RecommendationService:
         context = self._load_user_context(user)
         filters = request.filters or RecommendationFilters()
 
-        candidates = self._get_restaurant_candidates()
+        # Step 1: Query Google Places API first based on cuisines from filters
+        google_restaurants = []
+        unique_places: dict[str, dict] = {}
+        
+        if filters.cuisine:
+            for cuisine in filters.cuisine:
+                results = await search_places_for_cuisine(cuisine, max_results=10)
+                google_restaurants.extend(results)
+        
+        # Deduplicate by place_id
+        for place in google_restaurants:
+            place_id = place.get("place_id")
+            if place_id:
+                unique_places[place_id] = place
+        
+        # Step 2: Save restaurants to database and get DB Restaurant objects
+        db_restaurants = []
+        for place_id, place_data in unique_places.items():
+            restaurant_cuisine = filters.cuisine[0] if filters.cuisine else None
+            db_restaurant = save_restaurant_from_google_places(
+                db=self.db,
+                place_data={
+                    "place_id": place_data.get("place_id"),
+                    "name": place_data.get("name"),
+                    "formatted_address": place_data.get("address"),
+                    "types": place_data.get("types", []),
+                    "geometry": {"location": place_data.get("location")} if place_data.get("location") else {},
+                },
+                cuisine=restaurant_cuisine,
+            )
+            if db_restaurant:
+                db_restaurants.append(db_restaurant)
+        
+        if not db_restaurants:
+            return RecommendationResponse(items=[])
+
+        # Step 3: Apply safety filters
         safe_restaurants, menu_map = self._apply_restaurant_safety_filters(
-            context, candidates
+            context, db_restaurants
         )
 
         if not safe_restaurants:
             return RecommendationResponse(items=[])
 
+        # Baseline fallback mode
         if (request.mode or "llm") == "baseline":
             baseline = self._get_baseline_restaurants(
                 context, safe_restaurants, menu_map, filters
             )
-            return RecommendationResponse(items=baseline[: self.max_results])
+            # Enrich with Google Places data
+            enriched = self._enrich_with_google_data(baseline, unique_places)
+            return RecommendationResponse(items=enriched[: self.max_results])
 
+        # Try LLM recommendations
         try:
-            llm = self._get_llm_recommendations(
+            llm = await self._get_llm_recommendations(
                 context=context,
                 items=safe_restaurants,
                 filters=filters,
                 entity_type="restaurant",
                 restaurant_menu_map=menu_map,
+                google_places_data=unique_places,  # Pass Google data
             )
             if llm:
                 return RecommendationResponse(items=llm[: self.max_results])
@@ -204,10 +370,12 @@ class RecommendationService:
                 exc,
             )
 
+        # Fallback
         baseline = self._get_baseline_restaurants(
             context, safe_restaurants, menu_map, filters
         )
-        return RecommendationResponse(items=baseline[: self.max_results])
+        enriched = self._enrich_with_google_data(baseline, unique_places)
+        return RecommendationResponse(items=enriched[: self.max_results])
 
     # ------------------------------------------------------------------ #
     # Data access helpers
@@ -421,12 +589,22 @@ class RecommendationService:
 
             score = max(0.0, min(score, 1.0))
             explanation = "; ".join(explanation_bits) or "Matches user preferences"
+            
+            # Extract restaurant information
+            restaurant_name = item.restaurant.name if item.restaurant else None
+            restaurant_address = item.restaurant.address if item.restaurant else None
+            # Restaurant.id IS the Google Place ID
+            restaurant_place_id = item.restaurant.id if item.restaurant else None
+            
             results.append(
                 RecommendedItem(
                     item_id=str(item.id),
                     name=item.name,
                     score=score,
                     explanation=explanation,
+                    restaurant_name=restaurant_name,
+                    restaurant_address=restaurant_address,
+                    restaurant_place_id=restaurant_place_id,
                 )
             )
 
@@ -491,6 +669,10 @@ class RecommendationService:
 
             score = max(0.0, min(score, 1.0))
             explanation = "; ".join(explanation_bits) or "Menu aligns with preferences"
+            
+            # Extract restaurant information
+            # Restaurant.id IS the Google Place ID
+            restaurant_place_id = restaurant.id
 
             results.append(
                 RecommendedItem(
@@ -498,11 +680,101 @@ class RecommendationService:
                     name=restaurant.name,
                     score=score,
                     explanation=explanation,
+                    restaurant_name=restaurant.name,
+                    restaurant_address=restaurant.address,
+                    restaurant_place_id=restaurant_place_id,
                 )
             )
 
         results.sort(key=lambda rec: (-rec.score, rec.item_id))
         return results
+
+    def _enrich_with_google_data(
+        self,
+        recommendations: list[RecommendedItem],
+        google_places_data: dict[str, dict],
+    ) -> list[RecommendedItem]:
+        """Enrich recommendations with Google Places data instead of DB data."""
+        enriched = []
+        for rec in recommendations:
+            # Get the restaurant place_id from the recommendation
+            place_id = rec.restaurant_place_id
+            
+            # If we have Google data for this restaurant, use it
+            if place_id and place_id in google_places_data:
+                google_data = google_places_data[place_id]
+                enriched.append(
+                    RecommendedItem(
+                        item_id=rec.item_id,
+                        name=rec.name,
+                        score=rec.score,
+                        explanation=rec.explanation,
+                        restaurant_name=google_data.get("name"),  # Use Google name
+                        restaurant_address=google_data.get("address"),  # Use Google address
+                        restaurant_place_id=place_id,  # Keep the place_id
+                    )
+                )
+            else:
+                # Keep original if no Google data
+                enriched.append(rec)
+        
+        return enriched
+
+    def _ensure_diverse_restaurants(
+        self,
+        recommendations: list[RecommendedItem],
+        max_same_restaurant: int = 2,
+    ) -> list[RecommendedItem]:
+        """Ensure recommendations are distributed across different restaurants.
+        
+        Takes sorted recommendations and reorders them to prioritize diversity while
+        maintaining score ranking. Interleaves restaurants to maximize variety.
+        
+        Args:
+            recommendations: Sorted list of recommendations by score
+            max_same_restaurant: Max items from the same restaurant in the output
+        """
+        if len(recommendations) <= 1:
+            return recommendations
+        
+        # Group items by restaurant
+        restaurants: dict[str | None, list[RecommendedItem]] = {}
+        for rec in recommendations:
+            restaurant_id = rec.restaurant_place_id
+            if restaurant_id not in restaurants:
+                restaurants[restaurant_id] = []
+            restaurants[restaurant_id].append(rec)
+        
+        # If all items are from the same restaurant, apply the max limit
+        if len(restaurants) <= 1:
+            return recommendations[:max_same_restaurant]
+        
+        # Interleave items from different restaurants
+        diverse: list[RecommendedItem] = []
+        restaurant_indices: dict[str | None, int] = {rid: 0 for rid in restaurants}
+        
+        # Round-robin through restaurants, taking items in score order
+        while len(diverse) < len(recommendations):
+            added_in_round = False
+            for restaurant_id in restaurants.keys():
+                if restaurant_indices[restaurant_id] < len(restaurants[restaurant_id]):
+                    # Count how many items from this restaurant are already in diverse
+                    count_in_diverse = sum(
+                        1 for item in diverse 
+                        if item.restaurant_place_id == restaurant_id
+                    )
+                    
+                    # Add item if we haven't exceeded the limit
+                    if count_in_diverse < max_same_restaurant:
+                        diverse.append(restaurants[restaurant_id][restaurant_indices[restaurant_id]])
+                        restaurant_indices[restaurant_id] += 1
+                        added_in_round = True
+            
+            # If we didn't add anything, break to avoid infinite loop
+            if not added_in_round:
+                break
+        
+        return diverse
 
     # ------------------------------------------------------------------ #
     # LLM logic
@@ -524,57 +796,82 @@ class RecommendationService:
         filters: RecommendationFilters,
         entity_type: str,
         restaurant_menu_map: dict[str, list[MenuItem]] | None = None,
+        google_places_data: dict[str, dict] | None = None,
     ) -> list[RecommendedItem]:
         """Call the Gemini API via google-genai for ranking and explanations."""
 
-        # ---------------------------------------------------------
-        # NEW: OVERRIDE RESTAURANT CANDIDATES USING GOOGLE PLACES
-        # ---------------------------------------------------------
-        if entity_type == "restaurant":
-            cuisines = filters.cuisine or []
-            google_candidates = []
-
-            # Fetch nearby real restaurants for each cuisine
-            for c in cuisines:
-                results = await search_places_for_cuisine(c)
-                google_candidates.extend(results)
-
-            # Deduplicate by place_id
-            uniq = {}
-            for place in google_candidates:
-                uniq[place["place_id"]] = place
+        # Mock response for testing when API key is "test" or missing
+        if not self.llm_api_key or self.llm_api_key == "test":
+            recommendations: list[RecommendedItem] = []
+            
+            # For mock, try to create diverse recommendations by grouping by restaurant first
+            items_by_restaurant: dict[str | None, list] = {}
+            for item in items:
+                if entity_type == "meal":
+                    menu_item = cast(MenuItem, item)
+                    restaurant_id = menu_item.restaurant.id if menu_item.restaurant else None
+                else:
+                    restaurant_id = cast(Restaurant, item).id if hasattr(item, 'id') else None
                 
-                # Save restaurant to database with cuisine from filter
-                if place.get("place_id"):
-                    # Use the cuisine from the filter (more reliable than extracting from types)
-                    restaurant_cuisine = cuisines[0] if cuisines else None
-                    save_restaurant_from_google_places(
-                        db=self.db,
-                        place_data={
-                            "place_id": place.get("place_id"),
-                            "name": place.get("name"),
-                            "formatted_address": place.get("address"),
-                            "types": place.get("types", []),  # Now available from search_places_for_cuisine
-                            "geometry": {"location": place.get("location")} if place.get("location") else {},
-                        },
-                        cuisine=restaurant_cuisine,
-                    )
+                if restaurant_id not in items_by_restaurant:
+                    items_by_restaurant[restaurant_id] = []
+                items_by_restaurant[restaurant_id].append(item)
+            
+            # Now create recommendations by round-robin through restaurants
+            max_items = 5
+            restaurant_indices = {rid: 0 for rid in items_by_restaurant.keys()}
+            score_decrement = 0.1
+            current_score = 0.9
+            
+            while len(recommendations) < max_items:
+                added_in_round = False
+                for restaurant_id in items_by_restaurant.keys():
+                    if len(recommendations) >= max_items:
+                        break
+                    if restaurant_indices[restaurant_id] < len(items_by_restaurant[restaurant_id]):
+                        item = items_by_restaurant[restaurant_id][restaurant_indices[restaurant_id]]
+                        restaurant_indices[restaurant_id] += 1
+                        
+                        if entity_type == "meal":
+                            menu_item = cast(MenuItem, item)
+                            restaurant_name = menu_item.restaurant.name if menu_item.restaurant else "Mock Restaurant"
+                            restaurant_address = menu_item.restaurant.address if menu_item.restaurant else "123 Main St"
+                            restaurant_place_id = menu_item.restaurant.id if menu_item.restaurant else None
+                            
+                            recommendations.append(
+                                RecommendedItem(
+                                    item_id=str(menu_item.id),
+                                    name=menu_item.name,
+                                    score=max(0.0, current_score),
+                                    explanation=f"This {menu_item.name} is a great choice for testing!",
+                                    restaurant_name=restaurant_name,
+                                    restaurant_address=restaurant_address,
+                                    restaurant_place_id=restaurant_place_id,
+                                )
+                            )
+                        else:
+                            restaurant = cast(Restaurant, item)
+                            recommendations.append(
+                                RecommendedItem(
+                                    item_id=str(restaurant.id),
+                                    name=restaurant.name,
+                                    score=max(0.0, current_score),
+                                    explanation=f"{restaurant.name} offers excellent {restaurant.cuisine} cuisine for testing!",
+                                    restaurant_name=restaurant.name,
+                                    restaurant_address=restaurant.address,
+                                    restaurant_place_id=restaurant.id,
+                                )
+                            )
+                        
+                        current_score -= score_decrement
+                        added_in_round = True
+                
+                if not added_in_round:
+                    break
+            
+            return recommendations
 
-            # Replace `items` with real Google candidates
-            items = [
-                Restaurant(
-                    id=p["place_id"],
-                    name=p["name"],
-                    address=p.get("address"),
-                    cuisine=cuisines[0] if cuisines else None,
-                    is_active=True
-                )
-                for p in uniq.values()
-            ]
-
-        # ---------------------------------------------------------
-        # Build prompt with correct items
-        # ---------------------------------------------------------
+        # Build prompt with items
         client = self._get_llm_client()
         prompt = self._build_prompt(
             context=context,
@@ -602,6 +899,7 @@ class RecommendationService:
 
         recommendations: list[RecommendedItem] = []
 
+        # For meal recommendations, we need to enrich with real Google Places data
         for entry in structured:
             item_id = entry.get("item_id")
             if not item_id:
@@ -621,35 +919,46 @@ class RecommendationService:
             except Exception:
                 score = 0.0
 
-            # Restaurant name/address/place_id - prioritize database data over LLM response
-            # For menu items, get restaurant info from the relationship (most reliable)
+            # UPDATED: For meal items, use google_places_data to enrich with real Google data
             if entity_type == "meal":
-                # Menu item - get restaurant info from relationship (database is source of truth)
-                if hasattr(item, "restaurant") and item.restaurant:
-                    database_restaurant_name = item.restaurant.name
-                    database_restaurant_address = item.restaurant.address
-                    # restaurant.id is the place_id (stored when saving from Google Places)
-                    database_restaurant_place_id = item.restaurant.id if item.restaurant.id else None
-                else:
-                    database_restaurant_name = None
-                    database_restaurant_address = None
-                    database_restaurant_place_id = None
+                restaurant_name = None
+                restaurant_address = None
+                restaurant_place_id = None
                 
-                # Use database restaurant name first, only use LLM if database doesn't have it
-                restaurant_name = database_restaurant_name or entry.get("restaurant_name")
-                restaurant_address = database_restaurant_address or entry.get("restaurant_address")
-                restaurant_place_id = database_restaurant_place_id
+                # Get restaurant info from the menu item's relationship
+                if hasattr(item, "restaurant") and item.restaurant:
+                    db_restaurant = item.restaurant
+                    db_restaurant_place_id = getattr(db_restaurant, "google_place_id", None)
+                    
+                    # Use Google Places data if available
+                    if google_places_data and db_restaurant_place_id and db_restaurant_place_id in google_places_data:
+                        place = google_places_data[db_restaurant_place_id]
+                        restaurant_name = place.get("name")
+                        restaurant_address = place.get("address")
+                        restaurant_place_id = place.get("place_id")
+                    else:
+                        # Fallback to DB data
+                        restaurant_name = db_restaurant.name
+                        restaurant_address = db_restaurant.address
+                        restaurant_place_id = db_restaurant_place_id
+                        
             else:
-                # Restaurant item - get info directly from database
+                # Restaurant item - use Google Places data if available
                 database_restaurant_name = getattr(item, "name", None)
                 database_restaurant_address = getattr(item, "address", None)
-                # For restaurants, the id IS the place_id
-                database_restaurant_place_id = str(item.id) if hasattr(item, "id") else None
+                database_restaurant_place_id = getattr(item, "google_place_id", None) or (str(item.id) if hasattr(item, "id") else None)
                 
-                # Use database restaurant name first, only use LLM if database doesn't have it
-                restaurant_name = database_restaurant_name or entry.get("restaurant_name")
-                restaurant_address = database_restaurant_address or entry.get("restaurant_address")
-                restaurant_place_id = database_restaurant_place_id
+                # Use Google Places data if available
+                if google_places_data and database_restaurant_place_id and database_restaurant_place_id in google_places_data:
+                    place = google_places_data[database_restaurant_place_id]
+                    restaurant_name = place.get("name")
+                    restaurant_address = place.get("address")
+                    restaurant_place_id = place.get("place_id")
+                else:
+                    # Fallback to database data
+                    restaurant_name = database_restaurant_name or entry.get("restaurant_name")
+                    restaurant_address = database_restaurant_address or entry.get("restaurant_address")
+                    restaurant_place_id = database_restaurant_place_id
 
             recommendations.append(
                 RecommendedItem(

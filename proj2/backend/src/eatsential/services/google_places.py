@@ -7,13 +7,17 @@ NC_STATE_LAT = 35.7847
 NC_STATE_LNG = -78.6821
 SEARCH_RADIUS_METERS = 16000  # 10 miles
 
-async def search_places_for_cuisine(cuisine: str) -> list[dict]:
+async def search_places_for_cuisine(cuisine: str, max_results: int = 10) -> list[dict]:
+    """Search for restaurants by cuisine or restaurant name."""
     if not GOOGLE_MAPS_API_KEY:
         raise RuntimeError("GOOGLE_MAPS_API_KEY is not configured")
 
+    # If cuisine doesn't contain "restaurant", add it
+    query = cuisine if "restaurant" in cuisine.lower() else f"{cuisine} restaurant"
+    
     url = (
         "https://maps.googleapis.com/maps/api/place/textsearch/json"
-        f"?query={cuisine}+restaurant"
+        f"?query={query}"
         f"&location={NC_STATE_LAT},{NC_STATE_LNG}"
         f"&radius={SEARCH_RADIUS_METERS}"
         f"&key={GOOGLE_MAPS_API_KEY}"
@@ -38,6 +42,7 @@ async def search_places_for_cuisine(cuisine: str) -> list[dict]:
             "price_level": r.get("price_level"),
             "location": r.get("geometry", {}).get("location"),
             "types": r.get("types", []),  # Include types for cuisine extraction
+            "geometry": r.get("geometry", {}),  # Include full geometry for saving
         })
 
-    return places[:10]   # limit to reduce LLM cost
+    return places[:max_results]
