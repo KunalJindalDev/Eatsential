@@ -98,10 +98,10 @@ This project is currently a **work in progress**. Our development is planned in 
   - [x] Week 3 — v0.3 (Dual-Dimension Tracking): Enabled our dual-dimension tracking: meal logging (API + UI), mental-wellness tracking (mood, stress, sleep) with goal setting, plus admin audit logs.
   - [x] Week 4 — v0.4 (AI Recommendation Engine): Shipped the AI recommendation engine, backed by a restaurant/menu database and a hybrid LLM + rules API, with strict allergen filtering and deterministic fallback to ensure safety and stability.
 - **November: Release 2 - The Integrated Life Planner**
-  - [ ] Week 5 — v1.1 (AI Feedback Loop & Personalization): Added like/dislike feedback (API + UI) and fed signals into the recommender to adapt future results and reduce unwanted items.
-  - [ ] Week 6 — v1.2 (Interactive AI Health Concierge): Launched a chat-based assistant with session memory and profile access to answer nutrition questions and give real-time, personalized advice.
-  - [ ] Week 7 — v1.3 (Restaurant Discovery & Reviews): Introduced a map-based restaurant explorer (Mapbox/Google Maps) and community reviews for healthfulness and allergen safety.
-  - [ ] Week 8 — v1.4 (Dynamic AI Meal Planner): Delivered multi-day meal planning (3–7 days) that auto-generates plans from calorie/macros/goals, with manual swap and adjustment support.
+  - [x] Week 5 — v1.1 (AI Feedback Loop & Personalization): Added like/dislike feedback (API + UI) and fed signals into the recommender to adapt future results and reduce unwanted items.
+  - [x] Week 6 — v1.2 (Interactive AI Health Concierge): Launched a chat-based assistant with session memory and profile access to answer nutrition questions and give real-time, personalized advice.
+  - [x] Week 7 — v1.3 (Restaurant Discovery & Reviews): Introduced a map-based restaurant explorer (Mapbox/Google Maps) and community reviews for healthfulness and allergen safety.
+  - [x] Week 8 — v1.4 (Dynamic AI Meal Planner): Delivered multi-day meal planning (3–7 days) that auto-generates plans from calorie/macros/goals, with manual swap and adjustment support.
 
 ## 🤖 CI/CD Pipeline
 
