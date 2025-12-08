@@ -542,6 +542,7 @@ class Restaurant(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     address: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
     cuisine: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    website_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Timestamps
